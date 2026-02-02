@@ -1,6 +1,8 @@
 ﻿#### Sevetamryn 2026 ####
 
 $debug = $false
+$Lifescan = $true
+
 
 $LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
 $FilePattern = "*.log"
@@ -14,11 +16,10 @@ $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
 # Look for voices installed
 # $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
 $speaker.SelectVoice("Microsoft David Desktop")
-$dummy = $speaker.SpeakAsync("Monitoring Elite Dangerous Logfiles now!")
-$Lifescan = $true
 
 # System Initialisation
-$Starsystem = @{}
+$Global:Starsystem = @{}
+$Global:SystemName = "unknown"
 
 # Tracks the file currently being tailed
 $currentFile = $null
@@ -62,30 +63,41 @@ Function New-Event {
 
             
     ### StartJump - clear system Data on FSD Jump
-    if ($line.event -eq "StartJump" -and $Starsystem.Count -gt 0) {
-                
-        New-EDMessage -Voice $Lifescan -Message "System jump detected, safe system data to disk"
+    if ($line.event -eq "StartJump" -and $Global:Starsystem.Count -gt 0) {
         ## Dump System to Disk
+        
         $fixed = @{} 
-        foreach ($key in $Starsystem.Keys) { $fixed["$key"] = $Starsystem[$key] } $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Starsystem[$key].StarSystem).json"
+        foreach ($key in $Global:Starsystem.Keys) { 
+            $fixed["$key"] = $Global:Starsystem[$key] 
+        } 
+        $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
+        
+        New-EDMessage -Voice $Lifescan -Message "System jump from $($Global:SystemName) detected, wrote system data to disk."
+        
+        ## set creation time regarding timestamp (importand for log import)
+        (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
     }
+
+
     ### FSDJump - read exiting system data if exist
     if ($line.event -eq "FSDJump") {
         ## clear Data
-        New-EDMessage -Voice $Lifescan -Message "System jump finished"
-        $Starsystem = @{}
+        $line.Starsystem
+        $Global:SystemName = $line.StarSystem
+        New-EDMessage -Voice $Lifescan -Message "System jump finished to $($Global:SystemName)"
+        $Global:Starsystem = @{}
+        
         ## Read System from Disk
-        if (Test-Path "$LogPath\SystemData\$($Line.StarSystem).json") { 
-            New-EDMessage -Voice $Lifescan -Message "Load system information for $($Line.StarSystem)"
+        if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") { 
+            New-EDMessage -Voice $Lifescan -Message "Load system information for $($Global:SystemName)"
             # File exists → import JSON into a PSObject with integer keys 
-            $Data = Get-Content $LogPath\SystemData\$($Line.StarSystem).json -Raw | ConvertFrom-Json 
-            $Starsystem = @{} 
+            $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
             foreach ($key in $Data.PSObject.Properties.Name) { 
                 $intKey = [int]$key 
-                $Starsystem[$intKey] = $Data.$key 
+                $Global:Starsystem[$intKey] = $Data.$key 
             }
-            Write-Host "##### JSON file loaded for $($Line.StarSystem)" 
-            $Starsystem | Format-Table
+            Write-Host "##### JSON file loaded for $Global:SystemName" 
+            
         }
     }
 
@@ -93,27 +105,27 @@ Function New-Event {
     ### Scan Events
     if ($line.event -eq "Scan" -or $line.event-eq "ScanBaryCentre") {
         $updated = $true
-        if ( $Starsystem[$line.BodyID] -eq $null ) {
-            $Starsystem[$line.BodyID] += $line
+        if ( $Global:Starsystem[$line.BodyID] -eq $null ) {
+            $Global:Starsystem[$line.BodyID] += $line
         } else {
             foreach ($prop in $line.PSObject.Properties) { 
-                    $Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name $prop.Name -Value $prop.Value -Force 
+                    $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name $prop.Name -Value $prop.Value -Force 
             }
         }
         ###
-        if ($debug) {New-EDMessage -Voice $Lifescan -Message "Detected Scan type $($line.ScanType) for body number $($line.BodyID). Starsystem has now $($Starsystem.Count) members"}
-        # $Starsystem[$line.BodyID] | Format-List
+        if ($debug) {New-EDMessage -Voice $Lifescan -Message "Detected Scan type $($line.ScanType) for body number $($line.BodyID). Starsystem has now $($Global:Starsystem.Count) members"}
+        
 
     }
     ### FSS / SAA Events
     if (($line.event -eq "FSSBodySignals") -or ($line.event -eq "SAASignalsFound")) {
         $updated = $true
-        if ( $Starsystem[$line.BodyID] -eq $null ) {
-            $Starsystem[$line.BodyID] += $line
+        if ( $Global:Starsystem[$line.BodyID] -eq $null ) {
+            $Global:Starsystem[$line.BodyID] += $line
         } else {
-            $Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
+            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
         }
-        if ($debug) {New-EDMessage -Voice $Lifescan -Message "FSS or SAA signals detected for body numer $($line.BodyID). Starsystem has now $($Starsystem.Count) members"}
+        if ($debug) {New-EDMessage -Voice $Lifescan -Message "FSS or SAA signals detected for body numer $($line.BodyID). Starsystem has now $($Global:Starsystem.Count) members"}
                 
     }
             
@@ -122,11 +134,11 @@ Function New-Event {
     # Evaluation Part
     ###
     if ($updated) {
-        if ($Starsystem[$line.BodyID].Signals) {
+        if ($Global:Starsystem[$line.BodyID].Signals) {
             ### Shout out HMC with Signals
-            If ($Starsystem[$line.BodyID].PlanetClass -eq "High metal content body") {
+            If ($Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body") {
                 New-EDMessage -Voice $Lifescan -Message "High metal content body with signals found"
-                $Starsystem[$line.BodyID].Signals | Format-Table
+                $Global:Starsystem[$line.BodyID].Signals | Format-Table
             }
         }
     }
@@ -139,18 +151,26 @@ Function New-Event {
     # Finished FSS detected / discovered System 
     ###
     if ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 )) {
-        New-EDMessage -Voice $Lifescan -Message "Finished FSS Scan detected, found $($Starsystem.Count) system members"
+        New-EDMessage -Voice $Lifescan -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
 
         # Log Console Bodies with Signals
-        foreach ($Key in $Starsystem.keys) {
-            if ($Starsystem[$Key].Signals -ne $null) {
-                Write-Host $Starsystem[$Key].BodyName $Starsystem[$Key].Signals
+        foreach ($Key in $Global:Starsystem.keys) {
+            if ($Global:Starsystem[$Key].Signals -ne $null) {
+                Write-Host $key $Global:Starsystem[$Key].BodyName $Global:Starsystem[$Key].Signals
             }
         }
     }
 }
 
-while ($true) {
+
+
+New-EDMessage -Voice $Lifescan -Message "Monitoring Elite Dangerous Logfiles now!"
+
+
+###
+# Life scan logfile
+###
+while ($Lifescan) {
 
     # Detect newest file
     $newest = Get-NewestLogFile
@@ -195,3 +215,20 @@ while ($true) {
 
     Start-Sleep -Milliseconds 200
 }
+
+
+###
+# Import Logfiles
+###
+
+$Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name 
+
+foreach ($file in $logfiles ) {
+    $reader = [System.IO.File]::OpenText("$LogPath\$file") 
+    while (($read = $reader.ReadLine()) -ne $null) { 
+        $line = $read | ConvertFrom-Json
+        New-Event
+    } 
+    $reader.Close()
+}
+
