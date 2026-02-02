@@ -5,6 +5,9 @@ $debug = $false
 $LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
 $FilePattern = "*.log"
 
+# creat Folder for system files if not exist
+New-Item -Path "$LogPath\SystemData" -ItemType Directory -Force | Out-Null
+
 # Text to Speach Support
 Add-Type -AssemblyName System.Speech
 $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
