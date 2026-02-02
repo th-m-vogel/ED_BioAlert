@@ -14,7 +14,7 @@ $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
 # Look for voices installed
 # $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
 $speaker.SelectVoice("Microsoft David Desktop")
-$speaker.SpeakAsync("Monitoring Elite Dangerous Logfiles now!")
+$dummy = $speaker.SpeakAsync("Monitoring Elite Dangerous Logfiles now!")
 $Lifescan = $true
 
 # System Initialisation
@@ -35,17 +35,14 @@ Function New-EDMessage {
     [CmdletBinding()] 
     param( 
         [Parameter(Mandatory = $true)] [bool]$Voice, 
-        [Parameter(Mandatory = $true)] [string]$Message ) 
+        [Parameter(Mandatory = $true)] [string]$Message 
+        ) 
         
-        # --- Function logic goes here --- 
-        Write-Host "Voice value: $Flag"
-        Write-Host "Message value: $Message" 
-
-        if ($Voice) {
-            $dummy = $speaker.SpeakAsync($Message)
-        } else {
-            Write-Host $Message
-        }
+    if ($Voice) {
+        $dummy = $speaker.SpeakAsync($Message)
+    } else {
+        Write-Host $Message
+    }
             
 }
 
@@ -100,16 +97,34 @@ while ($true) {
             # need to care about scanned systems - event":"FSSDiscoveryScan", "Progress":1.000000 }
 
             
-            ### FSDJump - clear system Data on FSD Jump
-            if ($line.event -eq "FSDJump") {
+            ### StartJump - clear system Data on FSD Jump
+            if ($line.event -eq "StartJump") {
                 
-                New-EDMessage -Voice $Lifescan -Message "System jump detected, clearinmg starsystem data"
-                ## Dumnp System to Disk
+                New-EDMessage -Voice $Lifescan -Message "System jump detected, safe system data to disk"
+                ## Dump System to Disk
                 $fixed = @{} 
-                
                 foreach ($key in $Starsystem.Keys) { $fixed["$key"] = $Starsystem[$key] } $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Starsystem[$key].StarSystem).json"
-                $Starsystem = @{}
             }
+            ### FSDJump - read exiting system data if exist
+            if ($line.event -eq "FSDJump") {
+                ## clear Data
+                $Starsystem = @{}
+                ## Read System from Disk
+                if (Test-Path "$LogPath\SystemData\$($Line.StarSystem).json") { 
+                    # File exists → import JSON into a PSObject with integer keys 
+                    $Data = Get-Content $LogPath\SystemData\$($Line.StarSystem).json -Raw | ConvertFrom-Json 
+                    $Starsystem = @{} 
+                    foreach ($key in $Data.PSObject.Properties.Name) { 
+                        $intKey = [int]$key 
+                        $Starsystem[$intKey] = $Data.$key 
+                    }
+                    Write-Host "##### JSON file loaded for $($Line.StarSystem)" 
+
+                    $Starsystem | Format-Table
+                }
+            }
+
+
             ### Scan Events
             if ($line.event -eq "Scan" -or $line.event-eq "ScanBaryCentre") {
                 $updated = $true
