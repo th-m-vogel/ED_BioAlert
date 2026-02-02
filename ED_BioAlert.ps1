@@ -15,6 +15,7 @@ $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
 # $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
 $speaker.SelectVoice("Microsoft David Desktop")
 $speaker.SpeakAsync("Monitoring Elite Dangerous Logfiles now!")
+$Lifescan = $true
 
 # System Initialisation
 $Starsystem = @{}
