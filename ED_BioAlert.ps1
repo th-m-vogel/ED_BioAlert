@@ -1,5 +1,20 @@
-﻿$LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
+﻿#### Sevetamryn 2026 ####
+
+$debug = $false
+
+$LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
 $FilePattern = "*.log"
+
+# Text to Speach Support
+Add-Type -AssemblyName System.Speech
+$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+# Look for voices installed
+# $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
+$speaker.SelectVoice("Microsoft David Desktop")
+$speaker.SpeakAsync("Monitoring Elite Dangerous Logfiles now!")
+
+# System Initialisation
+$Starsystem = @{}
 
 # Tracks the file currently being tailed
 $currentFile = $null
@@ -10,6 +25,24 @@ function Get-NewestLogFile {
     Get-ChildItem -Path $LogPath -Filter $FilePattern |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
+}
+
+Function New-EDMessage { 
+    [CmdletBinding()] 
+    param( 
+        [Parameter(Mandatory = $true)] [bool]$Voice, 
+        [Parameter(Mandatory = $true)] [string]$Message ) 
+        
+        # --- Function logic goes here --- 
+        Write-Host "Voice value: $Flag"
+        Write-Host "Message value: $Message" 
+
+        if ($Voice) {
+            $dummy = $speaker.SpeakAsync($Message)
+        } else {
+            Write-Host $Message
+        }
+            
 }
 
 while ($true) {
@@ -38,7 +71,8 @@ while ($true) {
         $lastLength = $currentStream.Length  # Skip existing content
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
-        Write-Host "Switched to new log file: $($currentFile.Name)"
+        # Announce new logfile
+        New-EDMessage -Voice $Lifescan -Message "Switched to new log file: $($currentFile.Name)"
     }
 
     # Read new lines
@@ -47,8 +81,89 @@ while ($true) {
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         while (-not $reader.EndOfStream) {
-            $line = $reader.ReadLine()
-            Write-Host $line   # <-- Replace with your detailed processing later
+            $line = $reader.ReadLine() | ConvertFrom-Json
+            
+            ### write event types to console
+            Write-Host $line.event
+
+            ###
+            # evaluation shit happens here
+            ###
+            $updated = $false
+            
+            ### Listen to Events we are interested in
+
+            # need to care about scanned systems - event":"FSSDiscoveryScan", "Progress":1.000000 }
+
+            
+            ### FSDJump - clear system Data on FSD Jump
+            if ($line.event -eq "FSDJump") {
+                
+                New-EDMessage -Voice $Lifescan -Message "System jump detected, clearinmg starsystem data"
+                ## Dumnp System to Disk
+                $fixed = @{} 
+                
+                foreach ($key in $Starsystem.Keys) { $fixed["$key"] = $Starsystem[$key] } $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Starsystem[$key].StarSystem).json"
+                $Starsystem = @{}
+            }
+            ### Scan Events
+            if ($line.event -eq "Scan" -or $line.event-eq "ScanBaryCentre") {
+                $updated = $true
+                if ( $Starsystem[$line.BodyID] -eq $null ) {
+                    $Starsystem[$line.BodyID] += $line
+                } else {
+                    foreach ($prop in $line.PSObject.Properties) { 
+                         $Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name $prop.Name -Value $prop.Value -Force 
+                    }
+                }
+                ###
+                if ($debug) {New-EDMessage -Voice $Lifescan -Message "Detected Scan type $($line.ScanType) for body number $($line.BodyID). Starsystem has now $($Starsystem.Count) members"}
+                # $Starsystem[$line.BodyID] | Format-List
+
+            }
+            ### FSS / SAA Events
+            if (($line.event -eq "FSSBodySignals") -or ($line.event -eq "SAASignalsFound")) {
+                $updated = $true
+                if ( $Starsystem[$line.BodyID] -eq $null ) {
+                    $Starsystem[$line.BodyID] += $line
+                } else {
+                    $Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
+                }
+                if ($debug) {New-EDMessage -Voice $Lifescan -Message "FSS or SAA signals detected for body numer $($line.BodyID). Starsystem has now $($Starsystem.Count) members"}
+                
+            }
+            
+
+            ###
+            # Evaluation Part
+            ###
+            if ($updated) {
+               if ($Starsystem[$line.BodyID].Signals) {
+                    ### Shout out HMC with Signals
+                    If ($Starsystem[$line.BodyID].PlanetClass -eq "High metal content body") {
+                        New-EDMessage -Voice $Lifescan -Message "High metal content body with signals found"
+                        $Starsystem[$line.BodyID].Signals | Format-Table
+                    }
+                }
+            }
+
+            ###
+            # evaluation finished
+            ###
+            
+            ###
+            # Finished FSS detected / discovered System 
+            ###
+            if ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 )) {
+                New-EDMessage -Voice $Lifescan -Message "Finished FSS Scan detected, found $($Starsystem.Count) system members"
+
+                # Log Console Bodies with Signals
+                foreach ($Key in $Starsystem.keys) {
+                    if ($Starsystem[$Key].Signals -ne $null) {
+                        Write-Host $Starsystem[$Key].BodyName $Starsystem[$Key].Signals
+                    }
+                }
+            }
         }
 
         $lastLength = $currentStream.Position
