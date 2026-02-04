@@ -5,7 +5,7 @@ $Lifescan = $true
 
 
 $LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
-$FilePattern = "*.log"
+$FilePattern = "Journal*.log"
 
 # creat Folder for system files if not exist
 New-Item -Path "$LogPath\SystemData" -ItemType Directory -Force | Out-Null
@@ -50,7 +50,7 @@ Function New-EDMessage {
 Function New-Event {
 
     ### write event types to console
-    Write-Host $line.event
+    if ($debug -and $Lifescan ) { Write-Host $line.event }
 
     ###
     # evaluation shit happens here
@@ -58,12 +58,23 @@ Function New-Event {
     $updated = $false
             
     ### Listen to Events we are interested in
-
-    # need to care about scanned systems - event":"FSSDiscoveryScan", "Progress":1.000000 }
-
+    ### get initial location and load if available
+    if ($line.event -eq "Location" -and $Global:SystemName -eq "unknown" ) {
+        $Global:SystemName = $line.StarSystem
+        if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") {
+            $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
+            foreach ($key in $Data.PSObject.Properties.Name) { 
+                $intKey = [int]$key 
+                $Global:Starsystem[$intKey] = $Data.$key 
+            }
+            if ($debug ) {Write-Host "##### JSON file loaded for $Global:SystemName"}
+        }
+    }
+        
+    
             
     ### StartJump - clear system Data on FSD Jump
-    if ($line.event -eq "StartJump" -and $Global:Starsystem.Count -gt 0) {
+    if (($line.event -eq "StartJump" -or $line.event -eq "Shutdown") -and $Global:Starsystem.Count -gt 0) {
         ## Dump System to Disk
         
         $fixed = @{} 
@@ -72,7 +83,7 @@ Function New-Event {
         } 
         $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
         
-        New-EDMessage -Voice $Lifescan -Message "System jump from $($Global:SystemName) detected, wrote system data to disk."
+        New-EDMessage -Voice $debug -Message "Jump detected, wrote system data to disk."
         
         ## set creation time regarding timestamp (importand for log import)
         (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
@@ -84,20 +95,18 @@ Function New-Event {
         ## clear Data
         $line.Starsystem
         $Global:SystemName = $line.StarSystem
-        New-EDMessage -Voice $Lifescan -Message "System jump finished to $($Global:SystemName)"
+        New-EDMessage -Voice $debug -Message "System jump finished to $($Global:SystemName)"
         $Global:Starsystem = @{}
         
         ## Read System from Disk
         if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") { 
-            New-EDMessage -Voice $Lifescan -Message "Load system information for $($Global:SystemName)"
+            New-EDMessage -Voice $debug -Message "Load system information for $($Global:SystemName)"
             # File exists → import JSON into a PSObject with integer keys 
             $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
             foreach ($key in $Data.PSObject.Properties.Name) { 
                 $intKey = [int]$key 
                 $Global:Starsystem[$intKey] = $Data.$key 
             }
-            Write-Host "##### JSON file loaded for $Global:SystemName" 
-            
         }
     }
 
@@ -113,10 +122,8 @@ Function New-Event {
             }
         }
         ###
-        if ($debug) {New-EDMessage -Voice $Lifescan -Message "Detected Scan type $($line.ScanType) for body number $($line.BodyID). Starsystem has now $($Global:Starsystem.Count) members"}
-        
-
     }
+
     ### FSS / SAA Events
     if (($line.event -eq "FSSBodySignals") -or ($line.event -eq "SAASignalsFound")) {
         $updated = $true
@@ -124,9 +131,13 @@ Function New-Event {
             $Global:Starsystem[$line.BodyID] += $line
         } else {
             $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
+            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Genuses -Value $line.Genuses -Force
         }
-        if ($debug) {New-EDMessage -Voice $Lifescan -Message "FSS or SAA signals detected for body numer $($line.BodyID). Starsystem has now $($Global:Starsystem.Count) members"}
-                
+    }
+
+    ### ScanOrganic Events
+    if ($line.event -eq "ScanOrganic" ){   # -and $line.ScanType -eq "Log"){
+        if ($debug) {Write-Host "Organic Scan:" $line.ScanType}
     }
             
 
@@ -134,6 +145,7 @@ Function New-Event {
     # Evaluation Part
     ###
     if ($updated) {
+        ### test entry
         if ($Global:Starsystem[$line.BodyID].Signals) {
             ### Shout out HMC with Signals
             If ($Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body") {
@@ -156,7 +168,10 @@ Function New-Event {
         # Log Console Bodies with Signals
         foreach ($Key in $Global:Starsystem.keys) {
             if ($Global:Starsystem[$Key].Signals -ne $null) {
-                Write-Host $key $Global:Starsystem[$Key].BodyName $Global:Starsystem[$Key].Signals
+
+                foreach ($Signal in $Global:Starsystem[$Key].Signals) {
+                    Write-Host "Found" $Signal.Count $Signal.Type_Localised
+                }
             }
         }
     }
@@ -197,7 +212,7 @@ while ($Lifescan) {
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         # Announce new logfile
-        New-EDMessage -Voice $Lifescan -Message "Switched to new log file: $($currentFile.Name)"
+        New-EDMessage -Voice $debug -Message "Switched to new log file: $($currentFile.Name)"
     }
 
     # Read new lines
@@ -224,11 +239,13 @@ while ($Lifescan) {
 $Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name 
 
 foreach ($file in $logfiles ) {
+
     $reader = [System.IO.File]::OpenText("$LogPath\$file") 
     while (($read = $reader.ReadLine()) -ne $null) { 
         $line = $read | ConvertFrom-Json
         New-Event
     } 
     $reader.Close()
+    if ($debug) {Write-Host "file $file finished ... "}
 }
 
