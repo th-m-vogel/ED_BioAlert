@@ -150,7 +150,27 @@ Function New-Event {
 
     ### ScanOrganic Events
     if ($line.event -eq "ScanOrganic" ){   # -and $line.ScanType -eq "Log"){
-        if ($debug) {Write-Host "Organic Scan:" $line.ScanType}
+       if ($debug) {Write-Host "Organic Scan:" $line.ScanType}
+        $Genusfound = $false
+        if ($Global:Starsystem[$line.Body].SystemAddress -eq $line.SystemAddress ) {
+            for ($i = 0; $i -lt $Global:Starsystem[$line.Body].Genuses.Count; $i++) {
+                ## we have a matching genus entry in the list
+                if ($line.Genus -eq $Global:Starsystem[$line.Body].Genuses[$i].Genus) {
+                    foreach ($key in $line.PSObject.Properties.Name ) {
+                        $Global:Starsystem[$line.Body].Genuses[$i] | Add-Member -MemberType NoteProperty -Name $key -Value $line.$key -Force
+                    }
+                $Genusfound = $true
+                } 
+            }
+            if ( -not $Genusfound ) {
+                if (-not $Global:Starsystem[$line.Body].Genuses ) {
+                    $Global:Starsystem[$line.Body] | Add-Member -MemberType NoteProperty -Name Genuses -Value ([System.Collections.Generic.List[object]]::new()) -Force
+                }
+                $Global:Starsystem[$line.Body].Genuses += $line
+            }
+        } else {
+            Write-Host -ForegroundColor Red "Late Message. Bioscan is from" $line.SystemAddress "and we are in system" $Global:Starsystem[$line.Body].SystemAddress
+        }
     }
             
 
@@ -237,6 +257,16 @@ while ($Lifescan) {
 
         while (-not $reader.EndOfStream) {
             $line = $reader.ReadLine() | ConvertFrom-Json
+            ## Genuses need to be expandable later, therefor conversion from array to list
+            if ($line.Genuses) {
+                $list = [System.Collections.Generic.List[object]]::new()
+                foreach ($g in $line.Genuses) {
+                    $list.Add($g)
+                }
+                $line.Genuses = $list
+            }
+            #
+            # call the Event Handler
             New-Event
         }
 
@@ -260,6 +290,17 @@ foreach ($file in $logfiles ) {
     $reader = [System.IO.File]::OpenText("$LogPath\$file") 
     while (($read = $reader.ReadLine()) -ne $null) { 
         $line = $read | ConvertFrom-Json
+        if ($line.Genuses) {
+            $list = [System.Collections.Generic.List[object]]::new()
+            foreach ($g in $line.Genuses) {
+                $list.Add($g)
+            }
+            $line.Genuses = $list
+        }
+
+        ## fix for systems having a * in name
+        if ( $line.SystemName ) { $line.SystemName = $line.SystemName -replace '\*', 'STAR' }
+        ## wtf ...
         New-Event
     } 
     $reader.Close()
