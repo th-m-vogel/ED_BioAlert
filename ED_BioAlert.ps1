@@ -14,7 +14,7 @@
 ########################################################################
 
 $debug = $false
-$Lifescan = $false
+$Lifescan = $true
 
 
 $LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
@@ -80,7 +80,7 @@ Function New-Event {
                 $intKey = [int]$key 
                 $Global:Starsystem[$intKey] = $Data.$key 
             }
-            if ($debug ) {Write-Host "##### JSON file loaded for $Global:SystemName"}
+            New-EDMessage -Voice $debug -Message "Load system information for $($Global:SystemName)"
         }
     }
         
@@ -220,7 +220,10 @@ while ($Lifescan) {
         # Open new stream
         $currentFile = $newest
         $currentStream = [System.IO.File]::Open($currentFile.FullName, 'Open', 'Read', 'ReadWrite')
-        $lastLength = $currentStream.Length  # Skip existing content
+        # $lastLength = $currentStream.Length  # Skip existing content
+        # we fully read in the newest file to get up to date
+        $lastLength = 0 # read in exiting lines, stay quiet during read of existing data
+        $Lifescan = $false # work quietly during read in of exiting data
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         # Announce new logfile
@@ -241,6 +244,8 @@ while ($Lifescan) {
     }
 
     Start-Sleep -Milliseconds 200
+    if ( -not $Lifescan ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
+    $Lifescan = $true # as we had to wait for new log lines, time to talk again
 }
 
 
