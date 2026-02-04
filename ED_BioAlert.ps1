@@ -1,7 +1,7 @@
 ﻿#### Sevetamryn 2026 ####
 
 $debug = $false
-$Lifescan = $true
+$Lifescan = $false
 
 
 $LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
@@ -146,11 +146,10 @@ Function New-Event {
     ###
     if ($updated) {
         ### test entry
-        if ($Global:Starsystem[$line.BodyID].Signals) {
+        foreach ($Signal in $Global:Starsystem[$line.BodyID].Signals) {
             ### Shout out HMC with Signals
-            If ($Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body") {
-                New-EDMessage -Voice $Lifescan -Message "High metal content body with signals found"
-                $Global:Starsystem[$line.BodyID].Signals | Format-Table
+            If ($Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body" -and $Signal.Type_Localised -eq "Biological") {
+                New-EDMessage -Voice $Lifescan -Message "High metal content body with $($Signal.Count) $($Signal.Type_Localised) Signals found"
             }
         }
     }
@@ -170,7 +169,7 @@ Function New-Event {
             if ($Global:Starsystem[$Key].Signals -ne $null) {
 
                 foreach ($Signal in $Global:Starsystem[$Key].Signals) {
-                    Write-Host "Found" $Signal.Count $Signal.Type_Localised
+                    Write-Host "Found" $Signal.Count $Signal.Type_Localised "Signals"
                 }
             }
         }
