@@ -202,7 +202,7 @@ Function New-Event {
             if ($Global:Starsystem[$Key].Signals -ne $null) {
 
                 foreach ($Signal in $Global:Starsystem[$Key].Signals) {
-                    Write-Host "Found" $Signal.Count $Signal.Type_Localised "Signals"
+                    Write-Host $Global:Starsystem[$Key].BodyName "Found" $Signal.Count $Signal.Type_Localised "Signals"
                 }
             }
         }
