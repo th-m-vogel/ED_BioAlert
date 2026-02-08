@@ -15,8 +15,8 @@
 
 $Global:debug = $false
 $Global:Lifescan = $true
-$Global:ListEvents = $true
-$Global:TTSvolume = 65
+$Global:ListEvents = $false
+$Global:TTSvolume = 80
 
 $Global:Mining = $true
 
@@ -59,10 +59,8 @@ Function New-EDMessage {
         
     if ($Voice) {
         $dummy = $speaker.SpeakAsync($Message)
-    } else {
-        Write-Host $Message
-    }
-            
+    } 
+    Write-Host $Message
 }
 
 Function New-Event {
@@ -210,7 +208,7 @@ Function New-Event {
                         if ( $BioSignales.count -eq 1 ) {
                         New-EDMessage -Voice $Global:Lifescan -Message "There is a chance to find Stratum Tectonitas on body $BodyNameShort"
                         } else {
-                        New-EDMessage -Voice $Global:Lifescan -Message "There will be Stratum Tectonitas on body $BodyNameShort"
+                        New-EDMessage -Voice $Global:Lifescan -Message "I's almost certain that there is Stratum Tectonitas on body $BodyNameShort"
                     }
                 }
             }
