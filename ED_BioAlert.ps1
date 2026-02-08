@@ -13,8 +13,12 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ########################################################################
 
-$debug = $false
-$Lifescan = $true
+$Global:debug = $false
+$Global:Lifescan = $true
+$Global:ListEvents = $true
+$Global:TTSvolume = 65
+
+$Global:Mining = $true
 
 
 $LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
@@ -29,6 +33,7 @@ $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
 # Look for voices installed
 # $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
 $speaker.SelectVoice("Microsoft David Desktop")
+$speaker.Volume = $Global:TTSvolume
 
 # System Initialisation
 $Global:Starsystem = @{}
@@ -63,7 +68,9 @@ Function New-EDMessage {
 Function New-Event {
 
     ### write event types to console
-    if ($debug -and $Lifescan ) { Write-Host $line.event }
+    if ($Global:ListEvents -and $Global:Lifescan -and $line.event -ne "Music") { 
+        Write-Host "New Event:" $line.event 
+    }
 
     ###
     # evaluation shit happens here
@@ -80,7 +87,7 @@ Function New-Event {
                 $intKey = [int]$key 
                 $Global:Starsystem[$intKey] = $Data.$key 
             }
-            New-EDMessage -Voice $debug -Message "Load system information for $($Global:SystemName)"
+            New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
         }
     }
         
@@ -96,7 +103,7 @@ Function New-Event {
         } 
         $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
         
-        New-EDMessage -Voice $debug -Message "Jump detected, wrote system data to disk."
+        New-EDMessage -Voice $Global:debug -Message "Jump detected, wrote system data to disk."
         
         ## set creation time regarding timestamp (importand for log import)
         (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
@@ -108,12 +115,12 @@ Function New-Event {
         ## clear Data
         $line.Starsystem
         $Global:SystemName = $line.StarSystem
-        New-EDMessage -Voice $debug -Message "System jump finished to $($Global:SystemName)"
+        New-EDMessage -Voice $Global:debug -Message "System jump finished to $($Global:SystemName)"
         $Global:Starsystem = @{}
         
         ## Read System from Disk
         if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") { 
-            New-EDMessage -Voice $debug -Message "Load system information for $($Global:SystemName)"
+            New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
             # File exists → import JSON into a PSObject with integer keys 
             $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
             foreach ($key in $Data.PSObject.Properties.Name) { 
@@ -134,7 +141,6 @@ Function New-Event {
                     $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name $prop.Name -Value $prop.Value -Force 
             }
         }
-        ###
     }
 
     ### FSS / SAA Events
@@ -145,12 +151,13 @@ Function New-Event {
         } else {
             $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
             $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Genuses -Value $line.Genuses -Force
+            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Rings -Value $line.Rings -Force
         }
     }
 
     ### ScanOrganic Events
     if ($line.event -eq "ScanOrganic" ){   # -and $line.ScanType -eq "Log"){
-       if ($debug) {Write-Host "Organic Scan:" $line.ScanType}
+       if ($Global:debug) {Write-Host "Organic Scan:" $line.ScanType}
         $Genusfound = $false
         if ($Global:Starsystem[$line.Body].SystemAddress -eq $line.SystemAddress ) {
             for ($i = 0; $i -lt $Global:Starsystem[$line.Body].Genuses.Count; $i++) {
@@ -176,15 +183,61 @@ Function New-Event {
 
     ###
     # Evaluation Part
+    
     ###
     if ($updated) {
-        ### test entry
-        foreach ($Signal in $Global:Starsystem[$line.BodyID].Signals) {
-            ### Shout out HMC with Signals
-            If ($Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body" -and $Signal.Type_Localised -eq "Biological") {
-                New-EDMessage -Voice $Lifescan -Message "High metal content body with $($Signal.Count) $($Signal.Type_Localised) Signals found"
-            }
+        ## evaluate short body name
+        if ( $Global:Starsystem[$line.BodyID].BodyName ) {
+            $BodyNameShort = $Global:Starsystem[$line.BodyID].BodyName.Substring($Global:SystemName.Length).Trim()
         }
+
+        ####
+        # Processing signals
+        ####
+        if ($Global:Starsystem[$line.BodyID].Signals.count ) {
+            # Write-Host -ForegroundColor Red "Found" $Global:Starsystem[$line.BodyID].Signals.count "signal types"
+
+            ###
+            # Process Bio Signals
+            ###
+            If ( $BioSignales = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ '$SAA_SignalType_Biological;' ) {
+
+                ### Stratum Tectonitas
+                    if ( 
+                        $Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body" -and
+                        $Global:Starsystem[$line.BodyID].SurfaceTemperature -gt 165 
+                    ) {
+                        if ( $BioSignales.count -eq 1 ) {
+                        New-EDMessage -Voice $Global:Lifescan -Message "There is a chance to find Stratum Tectonitas on body $BodyNameShort"
+                        } else {
+                        New-EDMessage -Voice $Global:Lifescan -Message "There will be Stratum Tectonitas on body $BodyNameShort"
+                    }
+                }
+            }
+
+            ###
+            # Process Ressource Signals
+            ###
+            
+            ### Tritium found
+            if ( $Tritium = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ "Tritium" ) {
+                New-EDMessage -Voice $Global:Lifescan -Message "$($Tritium.count) Tritium Hotspots detected here."
+            }
+
+        }
+
+        ###
+        # Handle pristine Rings
+        ###
+        if ( $Global:Mining -and $Global:Starsystem[$line.BodyID].Rings.count -and $Global:Starsystem[$line.BodyID].ReserveLevel -eq "PristineResources" ) {
+
+            ### Icy Rings found 
+            If ( $IcyRings = $Global:Starsystem[$line.BodyID].Rings | Where-Object -Property "RingClass" -EQ "eRingClass_Icy" ) {
+                New-EDMessage -Voice $Global:Lifescan -Message "Body $BodyNameShort has pristine icy rings present."
+            }
+
+        }
+            
     }
 
     ###
@@ -195,7 +248,7 @@ Function New-Event {
     # Finished FSS detected / discovered System 
     ###
     if ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 )) {
-        New-EDMessage -Voice $Lifescan -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
+        New-EDMessage -Voice $Global:Lifescan -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
 
         # Log Console Bodies with Signals
         foreach ($Key in $Global:Starsystem.keys) {
@@ -211,13 +264,13 @@ Function New-Event {
 
 
 
-New-EDMessage -Voice $Lifescan -Message "Monitoring Elite Dangerous Logfiles now!"
+New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfiles now!"
 
 
 ###
 # Life scan logfile
 ###
-while ($Lifescan) {
+while ($Global:Lifescan) {
 
     # Detect newest file
     $newest = Get-NewestLogFile
@@ -243,11 +296,11 @@ while ($Lifescan) {
         # $lastLength = $currentStream.Length  # Skip existing content
         # we fully read in the newest file to get up to date
         $lastLength = 0 # read in exiting lines, stay quiet during read of existing data
-        $Lifescan = $false # work quietly during read in of exiting data
+        $Global:Lifescan = $false # work quietly during read in of exiting data
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         # Announce new logfile
-        New-EDMessage -Voice $debug -Message "Switched to new log file: $($currentFile.Name)"
+        New-EDMessage -Voice $Global:debug -Message "Switched to new log file: $($currentFile.Name)"
     }
 
     # Read new lines
@@ -274,8 +327,8 @@ while ($Lifescan) {
     }
 
     Start-Sleep -Milliseconds 200
-    if ( -not $Lifescan ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
-    $Lifescan = $true # as we had to wait for new log lines, time to talk again
+    if ( -not $Global:Lifescan ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
+    $Global:Lifescan = $true # as we had to wait for new log lines, time to talk again
 }
 
 
@@ -300,10 +353,11 @@ foreach ($file in $logfiles ) {
 
         ## fix for systems having a * in name
         if ( $line.SystemName ) { $line.SystemName = $line.SystemName -replace '\*', 'STAR' }
+        Write-Host -ForegroundColor Red "change special Carater in Systemname"
         ## wtf ...
         New-Event
     } 
     $reader.Close()
-    if ($debug) {Write-Host "file $file finished ... "}
+    if ($Global:debug) {Write-Host "file $file finished ... "}
 }
 
