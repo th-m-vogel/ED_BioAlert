@@ -44,7 +44,7 @@ $currentFile = $null
 $currentStream = $null
 $lastLength = 0
 
-function Get-NewestLogFile {
+Function Get-NewestLogFile {
     Get-ChildItem -Path $LogPath -Filter $FilePattern |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
