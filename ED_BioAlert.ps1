@@ -216,12 +216,20 @@ Function New-Event {
             ###
             # Process Ressource Signals
             ###
-            
-            ### Tritium found
-            if ( $Tritium = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ "Tritium" ) {
-                New-EDMessage -Voice $Global:Lifescan -Message "$($Tritium.count) Tritium Hotspots detected here."
-            }
+            if ($line.event -eq "SAASignalsFound") {
 
+                ### Log all found ressouirces to console
+                foreach ($Signal in $Global:Starsystem[$line.BodyID].Signals) {
+                    if ($Signal.Type -notlike "*SAA_SignalType*" ) {
+                        Write-Host $Signal.Count "Hotspost(s) found for" $Signal.Type
+                    }
+                }
+            
+                ### Tritium found
+                if ( $Tritium = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ "Tritium" ) {
+                    New-EDMessage -Voice $Global:Lifescan -Message "$($Tritium.count) Tritium Hotspots detected here."
+                }
+            }
         }
 
         ###
