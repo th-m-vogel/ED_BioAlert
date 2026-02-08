@@ -221,7 +221,7 @@ Function New-Event {
                 ### Log all found ressouirces to console
                 foreach ($Signal in $Global:Starsystem[$line.BodyID].Signals) {
                     if ($Signal.Type -notlike "*SAA_SignalType*" ) {
-                        Write-Host $Signal.Count "Hotspost(s) found for" $Signal.Type_Localised
+                        Write-Host $BodyNameShort $Signal.Count "Hotspost(s) found for" $Signal.Type
                     }
                 }
             
