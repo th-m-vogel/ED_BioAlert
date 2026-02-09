@@ -63,73 +63,83 @@ Function New-EDMessage {
     Write-Host $Message
 }
 
-Function New-Event {
-
-    ### write event types to console
-    if ($Global:ListEvents -and $Global:Lifescan -and $line.event -ne "Music") { 
-        Write-Host "New Event:" $line.event 
-    }
-
-    ###
-    # evaluation shit happens here
-    ###
-    $updated = $false
-            
-    ### Listen to Events we are interested in
-    ### get initial location and load if available
-    if ($line.event -eq "Location" -and $Global:SystemName -eq "unknown" ) {
-        $Global:SystemName = $line.StarSystem
-        if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") {
-            $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
-            foreach ($key in $Data.PSObject.Properties.Name) { 
-                $intKey = [int]$key 
-                $Global:Starsystem[$intKey] = $Data.$key 
-            }
-            New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
-        }
-    }
-        
-    
-            
-    ### StartJump - clear system Data on FSD Jump
-    if (($line.event -eq "StartJump" -or $line.event -eq "Shutdown") -and $Global:Starsystem.Count -gt 0) {
-        ## Dump System to Disk
-        
+Function Write-Starsystem {
+    if ($Global:Starsystem.Count -gt 0) {
         $fixed = @{} 
         foreach ($key in $Global:Starsystem.Keys) { 
             $fixed["$key"] = $Global:Starsystem[$key] 
         } 
         $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
         
-        New-EDMessage -Voice $Global:debug -Message "Jump detected, wrote system data to disk."
+        New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
         
         ## set creation time regarding timestamp (importand for log import)
         (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
     }
+    # clear data
+    $Global:Starsystem = @{}
+    $Global:SystemName = "unknown"
+}
 
-
-    ### FSDJump - read exiting system data if exist
-    if ($line.event -eq "FSDJump") {
-        ## clear Data
-        $line.Starsystem
-        $Global:SystemName = $line.StarSystem
-        New-EDMessage -Voice $Global:debug -Message "System jump finished to $($Global:SystemName)"
-        $Global:Starsystem = @{}
-        
-        ## Read System from Disk
-        if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") { 
-            New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
-            # File exists → import JSON into a PSObject with integer keys 
-            $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
-            foreach ($key in $Data.PSObject.Properties.Name) { 
-                $intKey = [int]$key 
-                $Global:Starsystem[$intKey] = $Data.$key 
-            }
+Function Read-Starsystem {
+    if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") {
+        $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
+        foreach ($key in $Data.PSObject.Properties.Name) { 
+            $intKey = [int]$key 
+            $Global:Starsystem[$intKey] = $Data.$key 
         }
+        New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
+    }
+}
+
+Function New-Event {
+
+    ### write event types to console
+    if ($Global:ListEvents -and $Global:Lifescan -and $line.event -ne "Music") { 
+        Write-Host "New Event:" $line.event 
+    }
+    $updated = $false
+
+    ### 
+    # System Data persistance handling
+    ###
+ 
+    ### Write System data on game exit
+    if ($line.event -eq "Shutdown" -and $Global:Starsystem.Count -gt 0) {
+        Write-Starsystem
     }
 
+    ### force read on new logfile
+    if ($line.event -eq "Location" ) {
+        Write-Starsystem
+        $Global:SystemName = $line.StarSystem
+        Read-Starsystem
+        }
 
-    ### Scan Events
+    ### Starsystem changed since last event
+    if ( ($Global:Starsystem.Count -gt 0) -and 
+            ($line.StarSystem -ne $null) -and 
+            ($line.StarSystem -ne $Global:SystemName) 
+        ) {
+        Write-Starsystem
+        $Global:SystemName = $line.StarSystem
+        Read-Starsystem
+    }
+ 
+    ### FSDJump - read exiting system data if exist
+    if ($line.event -eq "FSDJump") {
+        $Global:SystemName = $line.StarSystem
+        $Global:Starsystem = @{}
+        New-EDMessage -Voice $Global:debug -Message "System jump finished to $($Global:SystemName)"
+        ## Read System from Disk
+        Read-Starsystem
+    }
+
+    ###
+    # incomming data event handling
+    ###
+
+    ### Scan Event handling
     if ($line.event -eq "Scan" -or $line.event-eq "ScanBaryCentre") {
         $updated = $true
         if ( $Global:Starsystem[$line.BodyID] -eq $null ) {
@@ -181,12 +191,17 @@ Function New-Event {
 
     ###
     # Evaluation Part
+    ###
     
     ###
     if ($updated) {
         ## evaluate short body name
         if ( $Global:Starsystem[$line.BodyID].BodyName ) {
-            $BodyNameShort = $Global:Starsystem[$line.BodyID].BodyName.Substring($Global:SystemName.Length).Trim()
+            if ( $Global:Starsystem[$line.BodyID].BodyName -match "^$($Global:SystemName).+" ) {
+                $BodyNameShort = $Global:Starsystem[$line.BodyID].BodyName.Substring($Global:SystemName.Length).Trim()
+            } else {
+                $BodyNameShort = $Global:Starsystem[$line.BodyID].BodyName
+            }
         }
 
         ####
