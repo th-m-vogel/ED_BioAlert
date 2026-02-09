@@ -358,8 +358,9 @@ foreach ($file in $logfiles ) {
         }
 
         ## fix for systems having a * in name
-        if ( $line.SystemName ) { $line.SystemName = $line.SystemName -replace '\*', 'STAR' }
-        Write-Host -ForegroundColor Red "change special Carater in Systemname"
+        if ( $line.StarSystem ) { 
+            $line.StarSystem = $line.StarSystem -replace '\*', 'STAR' 
+        }
         ## wtf ...
         New-Event
     } 
