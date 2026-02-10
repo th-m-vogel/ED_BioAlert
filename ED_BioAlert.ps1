@@ -1,6 +1,6 @@
-﻿########################################################################
-####                   Sevetamryn 2026                              ####
-########################################################################
+﻿#############################################################################
+####                   Sevetamryn 2026                                   ####
+#############################################################################
 # THIS SOFTWARE IS PROVIDED “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
 # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
 # AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -11,11 +11,11 @@
 # WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-########################################################################
+#############################################################################
 
 $Global:debug = $false
 $Global:Lifescan = $true
-$Global:ListEvents = $false
+$Global:ListEvents = $true
 $Global:TTSvolume = 80
 
 $Global:Mining = $true
