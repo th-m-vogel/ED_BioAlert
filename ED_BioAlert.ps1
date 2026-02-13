@@ -187,6 +187,12 @@ Function New-Event {
             Write-Host -ForegroundColor Red "Late Message. Bioscan is from" $line.SystemAddress "and we are in system" $Global:Starsystem[$line.Body].SystemAddress
         }
     }
+
+    ### FSS Signals
+    if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalType -eq "TouristBeacon"){
+        New-EDMessage -Voice $Global:Lifescan -Message "There is Tourist Beacon here named $($line.SignalName)"
+    }
+
             
 
     ###
@@ -208,7 +214,6 @@ Function New-Event {
         # Processing signals
         ####
         if ($Global:Starsystem[$line.BodyID].Signals.count ) {
-            # Write-Host -ForegroundColor Red "Found" $Global:Starsystem[$line.BodyID].Signals.count "signal types"
 
             ###
             # Process Bio Signals
