@@ -189,8 +189,14 @@ Function New-Event {
     }
 
     ### FSS Signals
+
+    # Tourits Beaconm
     if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalType -eq "TouristBeacon"){
         New-EDMessage -Voice $Global:Lifescan -Message "There is Tourist Beacon here named $($line.SignalName)"
+    }
+    # stellar phenomena
+    if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalName -eq '$Fixed_Event_Life_Cloud;'){
+        New-EDMessage -Voice $Global:Lifescan -Message "Found a $($line.SignalName_Localised) here"
     }
 
             
