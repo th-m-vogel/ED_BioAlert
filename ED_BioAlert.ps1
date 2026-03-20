@@ -217,8 +217,8 @@ Function Invoke-EDEvent {
         Read-Starsystem
     }
  
-    ### FSDJump - read exiting system data if exist
-    if ($line.event -eq "FSDJump") {
+    ### FSDJump / CarrierJump - read existing system data if available
+    if ($line.event -eq "FSDJump" -or $line.event -eq "CarrierJump") {
         $Global:SystemName = $line.StarSystem
         $Global:Starsystem = @{}
         New-EDMessage -Voice $Global:debug -Message "System jump finished to $($Global:SystemName)"
