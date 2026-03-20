@@ -4,6 +4,7 @@
     "species": "Tectonitas",
     "reward": 19010800,
     "platform": "odyssey",
+    "dss_tts_alert": "Stratum Tectonitas confirmed on body {body}, worth {value} million credits.",
     "alerts": [
       {
         "level": "jackpot",

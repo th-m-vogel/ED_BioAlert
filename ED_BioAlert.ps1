@@ -55,6 +55,7 @@ if ($PSVersionTable.PSEdition -eq "Desktop") {
 $Global:Starsystem = @{}
 $Global:SystemName = "unknown"
 $Global:AlertedSpecies = @{}
+$Global:SystemScanAnnounced = $false
 
 # Tracks the file currently being tailed
 $currentFile = $null
@@ -135,6 +136,37 @@ Function Invoke-SpeciesAlerts {
                 New-EDMessage -Voice $Global:Lifescan -Message $message
                 $Global:AlertedSpecies[$alertKey] = $true
                 break  # first matching alert level only
+            }
+        }
+    }
+}
+
+Function Invoke-DSSAlerts {
+    param(
+        [Parameter(Mandatory=$true)] $Body,
+        [Parameter(Mandatory=$true)] [string]$BodyNameShort,
+        [Parameter(Mandatory=$true)] [int]$BioCount
+    )
+
+    foreach ($confirmedGenus in $Body.Genuses) {
+        $genusName = $confirmedGenus.Genus_Localised
+        foreach ($species in $Global:SpeciesAlerts) {
+            if ($species.genus -ne $genusName) { continue }
+            if (-not $species.dss_tts_alert) { continue }
+
+            $dssKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_dss"
+            if ($Global:AlertedSpecies[$dssKey]) { continue }
+
+            foreach ($alert in $species.alerts) {
+                if (Test-SpeciesConditions -Conditions $alert.conditions -Body $Body -BioCount $BioCount) {
+                    $value = [math]::Round($species.reward / 1000000, 1)
+                    $message = $species.dss_tts_alert `
+                        -replace '\{body\}', $BodyNameShort `
+                        -replace '\{value\}', $value
+                    New-EDMessage -Voice $Global:Lifescan -Message $message
+                    $Global:AlertedSpecies[$dssKey] = $true
+                    break
+                }
             }
         }
     }
@@ -221,6 +253,7 @@ Function Invoke-EDEvent {
     if ($line.event -eq "FSDJump" -or $line.event -eq "CarrierJump") {
         $Global:SystemName = $line.StarSystem
         $Global:Starsystem = @{}
+        $Global:SystemScanAnnounced = $false
         New-EDMessage -Voice $Global:debug -Message "System jump finished to $($Global:SystemName)"
         ## Read System from Disk
         Read-Starsystem
@@ -324,6 +357,11 @@ Function Invoke-EDEvent {
             ###
             if ($line.event -eq "SAASignalsFound") {
 
+                ### DSS genus-confirmed alerts
+                if ( $BioSignales -and $Global:Starsystem[$line.BodyID].Genuses.Count -gt 0 ) {
+                    Invoke-DSSAlerts -Body $Global:Starsystem[$line.BodyID] -BodyNameShort $BodyNameShort -BioCount $BioSignales.Count
+                }
+
                 ### Log all found ressouirces to console
                 foreach ($Signal in $Global:Starsystem[$line.BodyID].Signals) {
                     if ($Signal.Type -notlike "*SAA_SignalType*" ) {
@@ -359,7 +397,8 @@ Function Invoke-EDEvent {
     ###
     # Finished FSS detected / discovered System 
     ###
-    if ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 )) {
+    if (-not $Global:SystemScanAnnounced -and ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 ))) {
+        $Global:SystemScanAnnounced = $true
         New-EDMessage -Voice $Global:Lifescan -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
 
         # Log Console Bodies with Signals
