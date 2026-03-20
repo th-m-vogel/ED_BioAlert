@@ -1,6 +1,9 @@
 ﻿#############################################################################
 ####                   Sevetamryn 2026                                   ####
 #############################################################################
+param(
+    [switch]$ScanAll
+)
 # THIS SOFTWARE IS PROVIDED “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
 # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
 # AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -21,6 +24,7 @@ $Global:ListEvents = $_config.ListEvents
 $Global:TTSvolume  = $_config.TTSVolume
 $Global:Mining     = $_config.Mining
 $Global:Lifescan   = $true
+if ($ScanAll) { $Global:Lifescan = $false }
 
 if (-not $LogPath) {
     if ($_config.LogPath) { $LogPath = $_config.LogPath }
@@ -381,7 +385,7 @@ New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfi
 ###
 # Life scan logfile
 ###
-while ($Global:Lifescan -and -not $Global:TestMode) {
+while ($Global:Lifescan) {
 
     # Detect newest file
     $newest = Get-NewestLogFile

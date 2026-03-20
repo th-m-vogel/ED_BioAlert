@@ -1,9 +1,6 @@
 #############################################################################
-# Test script - runs log import against sample data (Linux / no TTS)
+# Test script - runs log import against journal data on Linux
 #############################################################################
 
 $LogPath = Join-Path $PSScriptRoot "..\Journal"
-$FilePattern = "Journal*.log"
-$Global:TestMode = $true   # disables live monitoring loop in main script
-
-. (Join-Path $PSScriptRoot "ED_BioAlert.ps1")
+. (Join-Path $PSScriptRoot "ED_BioAlert.ps1") -ScanAll
