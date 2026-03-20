@@ -200,12 +200,12 @@ Function Invoke-EDEvent {
         Write-Starsystem
     }
 
-    ### force read on new logfile
-    if ($line.event -eq "Location" ) {
+    ### force read on new logfile / carrier location on session start
+    if ($line.event -eq "Location" -or $line.event -eq "CarrierLocation") {
         Write-Starsystem
         $Global:SystemName = $line.StarSystem
         Read-Starsystem
-        }
+    }
 
     ### Starsystem changed since last event
     if ( ($Global:Starsystem.Count -gt 0) -and 
