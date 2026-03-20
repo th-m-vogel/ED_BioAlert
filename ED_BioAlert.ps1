@@ -46,6 +46,7 @@ if ($IsWindows) {
 # System Initialisation
 $Global:Starsystem = @{}
 $Global:SystemName = "unknown"
+$Global:AlertedSpecies = @{}
 
 # Tracks the file currently being tailed
 $currentFile = $null
@@ -114,6 +115,9 @@ Function Invoke-SpeciesAlerts {
     )
 
     foreach ($species in $Global:SpeciesAlerts) {
+        $alertKey = "$($Body.BodyID)_$($species.genus)_$($species.species)"
+        if ($Global:AlertedSpecies[$alertKey]) { continue }
+
         foreach ($alert in $species.alerts) {
             if (Test-SpeciesConditions -Conditions $alert.conditions -Body $Body -BioCount $BioCount) {
                 $value = [math]::Round($species.reward / 1000000, 1)
@@ -121,6 +125,7 @@ Function Invoke-SpeciesAlerts {
                     -replace '\{body\}', $BodyNameShort `
                     -replace '\{value\}', $value
                 New-EDMessage -Voice $Global:Lifescan -Message $message
+                $Global:AlertedSpecies[$alertKey] = $true
                 break  # first matching alert level only
             }
         }
@@ -156,6 +161,7 @@ Function Write-Starsystem {
     # clear data
     $Global:Starsystem = @{}
     $Global:SystemName = "unknown"
+    $Global:AlertedSpecies = @{}
 }
 
 Function Read-Starsystem {
