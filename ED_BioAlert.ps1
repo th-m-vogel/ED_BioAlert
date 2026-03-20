@@ -21,19 +21,27 @@ $Global:TTSvolume = 80
 $Global:Mining = $true
 
 
-$LogPath="$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous"
+if (-not $LogPath) { $LogPath = "$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous" }
 $FilePattern = "Journal*.log"
 
 # creat Folder for system files if not exist
 New-Item -Path "$LogPath\SystemData" -ItemType Directory -Force | Out-Null
 
 # Text to Speach Support
-Add-Type -AssemblyName System.Speech
-$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
-# Look for voices installed
-# $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
-$speaker.SelectVoice("Microsoft David Desktop")
-$speaker.Volume = $Global:TTSvolume
+$Global:TTSAvailable = $false
+if ($IsWindows) {
+    try {
+        Add-Type -AssemblyName System.Speech
+        $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+        # Look for voices installed
+        # $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
+        $speaker.SelectVoice("Microsoft David Desktop")
+        $speaker.Volume = $Global:TTSvolume
+        $Global:TTSAvailable = $true
+    } catch {
+        Write-Host "TTS initialisation failed: $_"
+    }
+}
 
 # System Initialisation
 $Global:Starsystem = @{}
@@ -126,9 +134,9 @@ Function New-EDMessage {
         [Parameter(Mandatory = $true)] [string]$Message 
         ) 
         
-    if ($Voice) {
+    if ($Voice -and $Global:TTSAvailable) {
         $dummy = $speaker.SpeakAsync($Message)
-    } 
+    }
     Write-Host $Message
 }
 
@@ -161,7 +169,7 @@ Function Read-Starsystem {
     }
 }
 
-Function New-Event {
+Function Invoke-EDEvent {
 
     ### write event types to console
     if ($Global:ListEvents -and $Global:Lifescan -and $line.event -ne "Music") { 
@@ -363,7 +371,7 @@ New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfi
 ###
 # Life scan logfile
 ###
-while ($Global:Lifescan) {
+while ($Global:Lifescan -and -not $Global:TestMode) {
 
     # Detect newest file
     $newest = Get-NewestLogFile
@@ -413,7 +421,7 @@ while ($Global:Lifescan) {
             }
             #
             # call the Event Handler
-            New-Event
+            Invoke-EDEvent
         }
 
         $lastLength = $currentStream.Position
@@ -433,7 +441,7 @@ $Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name
 
 foreach ($file in $logfiles ) {
 
-    $reader = [System.IO.File]::OpenText("$LogPath\$file") 
+    $reader = [System.IO.File]::OpenText($file.FullName)
     while (($read = $reader.ReadLine()) -ne $null) { 
         $line = $read | ConvertFrom-Json
         if ($line.Genuses) {
@@ -449,7 +457,7 @@ foreach ($file in $logfiles ) {
             $line.StarSystem = $line.StarSystem -replace '\*', 'STAR' 
         }
         ## wtf ...
-        New-Event
+        Invoke-EDEvent
     } 
     $reader.Close()
     if ($Global:debug) {Write-Host "file $file finished ... "}
