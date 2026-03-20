@@ -193,7 +193,7 @@ Function Write-Starsystem {
         } 
         $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
         
-        New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
+        ## New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
         
         ## set creation time regarding timestamp (importand for log import)
         (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
@@ -211,7 +211,7 @@ Function Read-Starsystem {
             $intKey = [int]$key 
             $Global:Starsystem[$intKey] = $Data.$key 
         }
-        New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
+        ## New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
     }
 }
 
