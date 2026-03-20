@@ -13,15 +13,19 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #############################################################################
 
-$Global:debug = $false
-$Global:Lifescan = $true
-$Global:ListEvents = $true
-$Global:TTSvolume = 80
+# Load configuration
+$_config = Get-Content (Join-Path $PSScriptRoot "ED_BioAlert.config.json") -Raw | ConvertFrom-Json
 
-$Global:Mining = $true
+$Global:debug      = $_config.Debug
+$Global:ListEvents = $_config.ListEvents
+$Global:TTSvolume  = $_config.TTSVolume
+$Global:Mining     = $_config.Mining
+$Global:Lifescan   = $true
 
-
-if (-not $LogPath) { $LogPath = "$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous" }
+if (-not $LogPath) {
+    if ($_config.LogPath) { $LogPath = $_config.LogPath }
+    else { $LogPath = "$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous" }
+}
 $FilePattern = "Journal*.log"
 
 # creat Folder for system files if not exist
@@ -35,7 +39,7 @@ if ($IsWindows) {
         $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
         # Look for voices installed
         # $speaker.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo
-        $speaker.SelectVoice("Microsoft David Desktop")
+        $speaker.SelectVoice($_config.TTSVoice)
         $speaker.Volume = $Global:TTSvolume
         $Global:TTSAvailable = $true
     } catch {

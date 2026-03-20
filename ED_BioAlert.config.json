@@ -1,0 +1,8 @@
+{
+  "LogPath":    "",
+  "Debug":      false,
+  "ListEvents": true,
+  "TTSVolume":  80,
+  "TTSVoice":   "Microsoft David Desktop",
+  "Mining":     true
+}
