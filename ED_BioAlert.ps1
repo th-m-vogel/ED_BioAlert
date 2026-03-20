@@ -385,7 +385,7 @@ New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfi
 ###
 # Life scan logfile
 ###
-while ($Global:Lifescan -and -not $Global:TestMode) {
+while ($Global:Lifescan) {
 
     # Detect newest file
     $newest = Get-NewestLogFile
