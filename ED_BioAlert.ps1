@@ -33,7 +33,7 @@ New-Item -Path "$LogPath\SystemData" -ItemType Directory -Force | Out-Null
 
 # Text to Speach Support
 $Global:TTSAvailable = $false
-if ($IsWindows) {
+if ($PSVersionTable.PSEdition -eq "Desktop") {
     try {
         Add-Type -AssemblyName System.Speech
         $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
