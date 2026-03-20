@@ -50,6 +50,75 @@ Function Get-NewestLogFile {
         Select-Object -First 1
 }
 
+Function Import-SpeciesData {
+    $Global:SpeciesAlerts = @()
+    $SpeciesPath = Join-Path $PSScriptRoot "SpeciesData"
+    if (Test-Path $SpeciesPath) {
+        foreach ($file in Get-ChildItem -Path $SpeciesPath -Filter "*.json") {
+            $entries = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            foreach ($entry in $entries) {
+                $Global:SpeciesAlerts += $entry
+            }
+        }
+    }
+    New-EDMessage -Voice $Global:debug -Message "Loaded $($Global:SpeciesAlerts.Count) species alert definitions"
+}
+
+Function Test-SpeciesConditions {
+    param(
+        [Parameter(Mandatory=$true)] $Conditions,
+        [Parameter(Mandatory=$true)] $Body,
+        [Parameter(Mandatory=$true)] [int]$BioCount
+    )
+
+    if ($Conditions.planet_class.Count -gt 0 -and $Body.PlanetClass -notin $Conditions.planet_class) { return $false }
+    if ($Conditions.atmosphere_type.Count -gt 0 -and $Body.AtmosphereType -notin $Conditions.atmosphere_type) { return $false }
+    if ($Conditions.volcanism.Count -gt 0 -and $Body.Volcanism -notin $Conditions.volcanism) { return $false }
+    if ($Conditions.star_type.Count -gt 0) {
+        $ParentStarType = $null
+        foreach ($parent in $Body.Parents) {
+            $starID = $parent.Star
+            if ($starID -ne $null -and $Global:Starsystem[$starID].StarType) {
+                $ParentStarType = $Global:Starsystem[$starID].StarType
+                break
+            }
+        }
+        if ($ParentStarType -notin $Conditions.star_type) { return $false }
+    }
+    if ($Conditions.temperature.min -ne $null -and $Body.SurfaceTemperature -lt $Conditions.temperature.min) { return $false }
+    if ($Conditions.temperature.max -ne $null -and $Body.SurfaceTemperature -gt $Conditions.temperature.max) { return $false }
+    if ($Conditions.gravity.min -ne $null -and $Body.SurfaceGravity -lt $Conditions.gravity.min) { return $false }
+    if ($Conditions.gravity.max -ne $null -and $Body.SurfaceGravity -gt $Conditions.gravity.max) { return $false }
+    if ($Conditions.bio_signals.min -ne $null -and $BioCount -lt $Conditions.bio_signals.min) { return $false }
+    if ($Conditions.bio_signals.max -ne $null -and $BioCount -gt $Conditions.bio_signals.max) { return $false }
+    if ($Conditions.PSObject.Properties.Name -contains "was_footfalled" -and $Conditions.was_footfalled -ne $null) {
+        if ($Body.WasFootfalled -ne $Conditions.was_footfalled) { return $false }
+    }
+
+    return $true
+}
+
+Function Invoke-SpeciesAlerts {
+    param(
+        [Parameter(Mandatory=$true)] $Body,
+        [Parameter(Mandatory=$true)] [string]$BodyNameShort,
+        [Parameter(Mandatory=$true)] [int]$BioCount
+    )
+
+    foreach ($species in $Global:SpeciesAlerts) {
+        foreach ($alert in $species.alerts) {
+            if (Test-SpeciesConditions -Conditions $alert.conditions -Body $Body -BioCount $BioCount) {
+                $value = [math]::Round($species.reward / 1000000, 1)
+                $message = $alert.tts_alert `
+                    -replace '\{body\}', $BodyNameShort `
+                    -replace '\{value\}', $value
+                New-EDMessage -Voice $Global:Lifescan -Message $message
+                break  # first matching alert level only
+            }
+        }
+    }
+}
+
 Function New-EDMessage { 
     [CmdletBinding()] 
     param( 
@@ -225,18 +294,7 @@ Function New-Event {
             # Process Bio Signals
             ###
             If ( $BioSignales = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ '$SAA_SignalType_Biological;' ) {
-
-                ### Stratum Tectonitas
-                    if ( 
-                        $Global:Starsystem[$line.BodyID].PlanetClass -eq "High metal content body" -and
-                        $Global:Starsystem[$line.BodyID].SurfaceTemperature -gt 165 
-                    ) {
-                        if ( $BioSignales.count -eq 1 ) {
-                        New-EDMessage -Voice $Global:Lifescan -Message "There is a chance to find Stratum Tectonitas on body $BodyNameShort"
-                        } else {
-                        New-EDMessage -Voice $Global:Lifescan -Message "I's almost certain that there is Stratum Tectonitas on body $BodyNameShort"
-                    }
-                }
+                Invoke-SpeciesAlerts -Body $Global:Starsystem[$line.BodyID] -BodyNameShort $BodyNameShort -BioCount $BioSignales.Count
             }
 
             ###
@@ -295,6 +353,9 @@ Function New-Event {
 }
 
 
+
+# Load species alert definitions
+Import-SpeciesData
 
 New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfiles now!"
 
