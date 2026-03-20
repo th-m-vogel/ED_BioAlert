@@ -140,7 +140,7 @@ Function New-Event {
     ###
 
     ### Scan Event handling
-    if ($line.event -eq "Scan" -or $line.event-eq "ScanBaryCentre") {
+    if ($line.event -eq "Scan" -or $line.event -eq "ScanBaryCentre") {
         $updated = $true
         if ( $Global:Starsystem[$line.BodyID] -eq $null ) {
             $Global:Starsystem[$line.BodyID] += $line
