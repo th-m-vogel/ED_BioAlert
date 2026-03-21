@@ -202,18 +202,19 @@ Function New-EDMessage {
 }
 
 Function Write-Starsystem {
+    param([string]$Timestamp)
     if ($Global:Starsystem.Count -gt 0) {
-        $fixed = @{} 
-        foreach ($key in $Global:Starsystem.Keys) { 
-            $fixed["$key"] = $Global:Starsystem[$key] 
-        } 
+        $fixed = @{}
+        foreach ($key in $Global:Starsystem.Keys) {
+            $fixed["$key"] = $Global:Starsystem[$key]
+        }
         $systemFile = Join-Path $LogPath "SystemData\$($Global:SystemName).json"
         $fixed | ConvertTo-Json -Depth 10 | Set-Content $systemFile
 
         ## New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
 
         ## set creation time regarding timestamp (importand for log import)
-        (Get-Item $systemFile).LastWriteTime = [datetime]$line.timestamp
+        if ($Timestamp) { (Get-Item $systemFile).LastWriteTime = [datetime]$Timestamp }
     }
     # clear data
     $Global:Starsystem = @{}
@@ -251,10 +252,11 @@ Function Invoke-LogLine {
         foreach ($g in $line.Genuses) { $list.Add($g) }
         $line.Genuses = $list
     }
-    Invoke-EDEvent
+    Invoke-EDEvent -line $line
 }
 
 Function Invoke-EDEvent {
+    param($line)
 
     ### write event types to console
     if ($Global:ListEvents -and $Global:TTS -and $line.event -ne "Music") {
@@ -268,22 +270,22 @@ Function Invoke-EDEvent {
  
     ### Write System data on game exit
     if ($line.event -eq "Shutdown" -and $Global:Starsystem.Count -gt 0) {
-        Write-Starsystem
+        Write-Starsystem -Timestamp $line.timestamp
     }
 
     ### force read on new logfile / carrier location on session start
     if ($line.event -eq "Location" -or $line.event -eq "CarrierLocation") {
-        Write-Starsystem
+        Write-Starsystem -Timestamp $line.timestamp
         $Global:SystemName = $line.StarSystem
         Read-Starsystem
     }
 
     ### Starsystem changed since last event
-    if ( ($Global:Starsystem.Count -gt 0) -and 
-            ($line.StarSystem -ne $null) -and 
-            ($line.StarSystem -ne $Global:SystemName) 
+    if ( ($Global:Starsystem.Count -gt 0) -and
+            ($line.StarSystem -ne $null) -and
+            ($line.StarSystem -ne $Global:SystemName)
         ) {
-        Write-Starsystem
+        Write-Starsystem -Timestamp $line.timestamp
         $Global:SystemName = $line.StarSystem
         Read-Starsystem
     }
