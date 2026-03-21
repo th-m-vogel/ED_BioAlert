@@ -215,6 +215,20 @@ Function Read-Starsystem {
     }
 }
 
+Function Invoke-LogLine {
+    param([string]$RawLine)
+    $line = $RawLine | ConvertFrom-Json
+    if ($line.StarSystem) {
+        $line.StarSystem = $line.StarSystem -replace '\*', 'STAR'
+    }
+    if ($line.Genuses) {
+        $list = [System.Collections.Generic.List[object]]::new()
+        foreach ($g in $line.Genuses) { $list.Add($g) }
+        $line.Genuses = $list
+    }
+    Invoke-EDEvent
+}
+
 Function Invoke-EDEvent {
 
     ### write event types to console
@@ -463,18 +477,7 @@ while ($Global:Lifescan) {
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         while (-not $reader.EndOfStream) {
-            $line = $reader.ReadLine() | ConvertFrom-Json
-            ## Genuses need to be expandable later, therefor conversion from array to list
-            if ($line.Genuses) {
-                $list = [System.Collections.Generic.List[object]]::new()
-                foreach ($g in $line.Genuses) {
-                    $list.Add($g)
-                }
-                $line.Genuses = $list
-            }
-            #
-            # call the Event Handler
-            Invoke-EDEvent
+            Invoke-LogLine -RawLine $reader.ReadLine()
         }
 
         $lastLength = $currentStream.Position
@@ -495,23 +498,9 @@ $Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name
 foreach ($file in $logfiles ) {
 
     $reader = [System.IO.File]::OpenText($file.FullName)
-    while (($read = $reader.ReadLine()) -ne $null) { 
-        $line = $read | ConvertFrom-Json
-        if ($line.Genuses) {
-            $list = [System.Collections.Generic.List[object]]::new()
-            foreach ($g in $line.Genuses) {
-                $list.Add($g)
-            }
-            $line.Genuses = $list
-        }
-
-        ## fix for systems having a * in name
-        if ( $line.StarSystem ) { 
-            $line.StarSystem = $line.StarSystem -replace '\*', 'STAR' 
-        }
-        ## wtf ...
-        Invoke-EDEvent
-    } 
+    while (($read = $reader.ReadLine()) -ne $null) {
+        Invoke-LogLine -RawLine $read
+    }
     $reader.Close()
     if ($Global:debug) {Write-Host "file $file finished ... "}
 }
