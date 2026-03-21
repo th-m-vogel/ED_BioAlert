@@ -2,7 +2,8 @@
 ####                   Sevetamryn 2026                                   ####
 #############################################################################
 param(
-    [switch]$ScanAll
+    [switch]$ScanAll,
+    [string]$TestFile
 )
 # THIS SOFTWARE IS PROVIDED “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
 # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
@@ -25,7 +26,8 @@ $Global:TTSvolume  = $_config.TTSVolume
 $Global:Mining     = $_config.Mining
 $Global:LiveMode   = $true
 $Global:TTS        = $true
-if ($ScanAll) { $Global:LiveMode = $false; $Global:TTS = $false }
+if ($ScanAll)   { $Global:LiveMode = $false; $Global:TTS = $false }
+if ($TestFile)  { $Global:LiveMode = $false }
 
 if (-not $LogPath) {
     if ($_config.LogPath) { $LogPath = $_config.LogPath }
@@ -173,17 +175,21 @@ Function Invoke-DSSAlerts {
     }
 }
 
-Function New-EDMessage { 
-    [CmdletBinding()] 
-    param( 
-        [Parameter(Mandatory = $true)] [bool]$Voice, 
-        [Parameter(Mandatory = $true)] [string]$Message 
-        ) 
-        
+Function New-EDMessage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)] [bool]$Voice,
+        [Parameter(Mandatory = $true)] [string]$Message
+        )
+
     if ($Voice -and $Global:TTSAvailable) {
         $dummy = $speaker.SpeakAsync($Message)
+        Write-Host $Message
+    } elseif ($Voice) {
+        Write-Host $Message -ForegroundColor Green
+    } else {
+        Write-Host $Message
     }
-    Write-Host $Message
 }
 
 Function Write-Starsystem {
@@ -494,15 +500,19 @@ while ($Global:LiveMode) {
 # Import Logfiles
 ###
 
-$Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name 
+if ($TestFile) {
+    $Logfiles = @(Get-Item $TestFile)
+} else {
+    $Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name
+}
 
-foreach ($file in $logfiles ) {
+foreach ($file in $Logfiles) {
 
     $reader = [System.IO.File]::OpenText($file.FullName)
     while (($read = $reader.ReadLine()) -ne $null) {
         Invoke-LogLine -RawLine $read
     }
     $reader.Close()
-    if ($Global:debug) {Write-Host "file $file finished ... "}
+    if ($Global:debug) { Write-Host "file $file finished ... " }
 }
 
