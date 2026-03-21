@@ -207,7 +207,7 @@ Function Write-Starsystem {
         foreach ($key in $Global:Starsystem.Keys) { 
             $fixed["$key"] = $Global:Starsystem[$key] 
         } 
-        $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
+        $fixed | ConvertTo-Json -Depth 10 | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
         
         ## New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
         
@@ -222,10 +222,16 @@ Function Write-Starsystem {
 
 Function Read-Starsystem {
     if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") {
-        $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
-        foreach ($key in $Data.PSObject.Properties.Name) { 
-            $intKey = [int]$key 
-            $Global:Starsystem[$intKey] = $Data.$key 
+        $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json
+        foreach ($key in $Data.PSObject.Properties.Name) {
+            $intKey = [int]$key
+            $body = $Data.$key
+            if ($body.Genuses) {
+                $list = [System.Collections.Generic.List[object]]::new()
+                foreach ($g in $body.Genuses) { $list.Add($g) }
+                $body | Add-Member -MemberType NoteProperty -Name Genuses -Value $list -Force
+            }
+            $Global:Starsystem[$intKey] = $body
         }
         ## New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
     }
