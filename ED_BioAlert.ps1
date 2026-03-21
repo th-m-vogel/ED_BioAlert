@@ -1,10 +1,6 @@
 ﻿#############################################################################
-####                   Sevetamryn 2026                                   ####
+####              Sevetamryn & Claude 2026                               ####
 #############################################################################
-param(
-    [switch]$ScanAll,
-    [string]$TestFile
-)
 # THIS SOFTWARE IS PROVIDED “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
 # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
 # AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -16,6 +12,19 @@ param(
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #############################################################################
+#
+# Command line options:
+#   (none)        Live mode: tail the newest journal file, TTS active
+#   -ScanAll      Process all journal files in log directory, console output only
+#   -TestFile     Process a single journal file with TTS active from line 1,
+#                 simulating live mode without a running game
+#                 Example: .\ED_BioAlert.ps1 -TestFile “path\to\Journal.log”
+#
+#############################################################################
+param(
+    [switch]$ScanAll,
+    [string]$TestFile
+)
 
 # Load configuration
 $_config = Get-Content (Join-Path $PSScriptRoot "ED_BioAlert.config.json") -Raw | ConvertFrom-Json
