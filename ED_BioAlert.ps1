@@ -218,6 +218,7 @@ Function Write-Starsystem {
     $Global:Starsystem = @{}
     $Global:SystemName = "unknown"
     $Global:AlertedSpecies = @{}
+    $Global:SystemScanAnnounced = $false
 }
 
 Function Read-Starsystem {
@@ -317,9 +318,9 @@ Function Invoke-EDEvent {
         if ( $Global:Starsystem[$line.BodyID] -eq $null ) {
             $Global:Starsystem[$line.BodyID] += $line
         } else {
-            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
-            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Genuses -Value $line.Genuses -Force
-            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Rings -Value $line.Rings -Force
+            if ($line.Signals -ne $null) { $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force }
+            if ($line.Genuses -ne $null) { $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Genuses -Value $line.Genuses -Force }
+            if ($line.Rings   -ne $null) { $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Rings   -Value $line.Rings   -Force }
         }
     }
 
