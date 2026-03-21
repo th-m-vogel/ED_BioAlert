@@ -23,8 +23,9 @@ $Global:debug      = $_config.Debug
 $Global:ListEvents = $_config.ListEvents
 $Global:TTSvolume  = $_config.TTSVolume
 $Global:Mining     = $_config.Mining
-$Global:Lifescan   = $true
-if ($ScanAll) { $Global:Lifescan = $false }
+$Global:LiveMode   = $true
+$Global:TTS        = $true
+if ($ScanAll) { $Global:LiveMode = $false; $Global:TTS = $false }
 
 if (-not $LogPath) {
     if ($_config.LogPath) { $LogPath = $_config.LogPath }
@@ -133,7 +134,7 @@ Function Invoke-SpeciesAlerts {
                 $message = $alert.tts_alert `
                     -replace '\{body\}', $BodyNameShort `
                     -replace '\{value\}', $value
-                New-EDMessage -Voice $Global:Lifescan -Message $message
+                New-EDMessage -Voice $Global:TTS -Message $message
                 $Global:AlertedSpecies[$alertKey] = $true
                 break  # first matching alert level only
             }
@@ -163,7 +164,7 @@ Function Invoke-DSSAlerts {
                     $message = $species.dss_tts_alert `
                         -replace '\{body\}', $BodyNameShort `
                         -replace '\{value\}', $value
-                    New-EDMessage -Voice $Global:Lifescan -Message $message
+                    New-EDMessage -Voice $Global:TTS -Message $message
                     $Global:AlertedSpecies[$dssKey] = $true
                     break
                 }
@@ -232,7 +233,7 @@ Function Invoke-LogLine {
 Function Invoke-EDEvent {
 
     ### write event types to console
-    if ($Global:ListEvents -and $Global:Lifescan -and $line.event -ne "Music") { 
+    if ($Global:ListEvents -and $Global:TTS -and $line.event -ne "Music") {
         Write-Host "New Event:" $line.event 
     }
     $updated = $false
@@ -330,11 +331,11 @@ Function Invoke-EDEvent {
 
     # Tourits Beaconm
     if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalType -eq "TouristBeacon"){
-        New-EDMessage -Voice $Global:Lifescan -Message "There is Tourist Beacon here named $($line.SignalName)"
+        New-EDMessage -Voice $Global:TTS -Message "There is Tourist Beacon here named $($line.SignalName)"
     }
     # stellar phenomena
     if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalName -eq '$Fixed_Event_Life_Cloud;'){
-        New-EDMessage -Voice $Global:Lifescan -Message "Found a $($line.SignalName_Localised) here"
+        New-EDMessage -Voice $Global:TTS -Message "Found a $($line.SignalName_Localised) here"
     }
 
             
@@ -385,7 +386,7 @@ Function Invoke-EDEvent {
             
                 ### Tritium found
                 if ( $Tritium = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ "Tritium" ) {
-                    New-EDMessage -Voice $Global:Lifescan -Message "$($Tritium.count) Tritium Hotspots detected here."
+                    New-EDMessage -Voice $Global:TTS -Message "$($Tritium.count) Tritium Hotspots detected here."
                 }
             }
         }
@@ -397,7 +398,7 @@ Function Invoke-EDEvent {
 
             ### Icy Rings found 
             If ( $IcyRings = $Global:Starsystem[$line.BodyID].Rings | Where-Object -Property "RingClass" -EQ "eRingClass_Icy" ) {
-                New-EDMessage -Voice $Global:Lifescan -Message "Body $BodyNameShort has pristine icy rings present."
+                New-EDMessage -Voice $Global:TTS -Message "Body $BodyNameShort has pristine icy rings present."
             }
 
         }
@@ -413,7 +414,7 @@ Function Invoke-EDEvent {
     ###
     if (-not $Global:SystemScanAnnounced -and ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 ))) {
         $Global:SystemScanAnnounced = $true
-        New-EDMessage -Voice $Global:Lifescan -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
+        New-EDMessage -Voice $Global:TTS -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
 
         # Log Console Bodies with Signals
         foreach ($Key in $Global:Starsystem.keys) {
@@ -432,13 +433,13 @@ Function Invoke-EDEvent {
 # Load species alert definitions
 Import-SpeciesData
 
-New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfiles now!"
+New-EDMessage -Voice $Global:TTS -Message "Monitoring Elite Dangerous Logfiles now!"
 
 
 ###
 # Life scan logfile
 ###
-while ($Global:Lifescan) {
+while ($Global:LiveMode) {
 
     # Detect newest file
     $newest = Get-NewestLogFile
@@ -463,8 +464,8 @@ while ($Global:Lifescan) {
         $currentStream = [System.IO.File]::Open($currentFile.FullName, 'Open', 'Read', 'ReadWrite')
         # $lastLength = $currentStream.Length  # Skip existing content
         # we fully read in the newest file to get up to date
-        $lastLength = 0 # read in exiting lines, stay quiet during read of existing data
-        $Global:Lifescan = $false # work quietly during read in of exiting data
+        $lastLength = 0 # read in existing lines, stay quiet during catch-up
+        $Global:TTS = $false # suppress TTS during catch-up read
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         # Announce new logfile
@@ -484,8 +485,8 @@ while ($Global:Lifescan) {
     }
 
     Start-Sleep -Milliseconds 200
-    if ( -not $Global:Lifescan ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
-    $Global:Lifescan = $true # as we had to wait for new log lines, time to talk again
+    if ( -not $Global:TTS ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
+    $Global:TTS = $true # catch-up done, TTS active again
 }
 
 
