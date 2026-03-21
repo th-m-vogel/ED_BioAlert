@@ -40,12 +40,12 @@ if ($TestFile)  { $Global:LiveMode = $false }
 
 if (-not $LogPath) {
     if ($_config.LogPath) { $LogPath = $_config.LogPath }
-    else { $LogPath = "$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous" }
+    else { $LogPath = Join-Path $env:USERPROFILE "Saved Games\Frontier Developments\Elite Dangerous" }
 }
 $FilePattern = "Journal*.log"
 
 # creat Folder for system files if not exist
-New-Item -Path "$LogPath\SystemData" -ItemType Directory -Force | Out-Null
+New-Item -Path (Join-Path $LogPath "SystemData") -ItemType Directory -Force | Out-Null
 
 # Text to Speach Support
 $Global:TTSAvailable = $false
@@ -207,12 +207,13 @@ Function Write-Starsystem {
         foreach ($key in $Global:Starsystem.Keys) { 
             $fixed["$key"] = $Global:Starsystem[$key] 
         } 
-        $fixed | ConvertTo-Json -Depth 10 | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
-        
+        $systemFile = Join-Path $LogPath "SystemData\$($Global:SystemName).json"
+        $fixed | ConvertTo-Json -Depth 10 | Set-Content $systemFile
+
         ## New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
-        
+
         ## set creation time regarding timestamp (importand for log import)
-        (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
+        (Get-Item $systemFile).LastWriteTime = [datetime]$line.timestamp
     }
     # clear data
     $Global:Starsystem = @{}
@@ -222,8 +223,9 @@ Function Write-Starsystem {
 }
 
 Function Read-Starsystem {
-    if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") {
-        $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json
+    $systemFile = Join-Path $LogPath "SystemData\$($Global:SystemName).json"
+    if (Test-Path $systemFile) {
+        $Data = Get-Content $systemFile -Raw | ConvertFrom-Json
         foreach ($key in $Data.PSObject.Properties.Name) {
             $intKey = [int]$key
             $body = $Data.$key
