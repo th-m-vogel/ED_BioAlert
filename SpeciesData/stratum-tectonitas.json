@@ -2,6 +2,7 @@
   {
     "genus": "Stratum",
     "species": "Tectonitas",
+    "color": "",
     "reward": 19010800,
     "platform": "odyssey",
     "dss_tts_alert": "Stratum Tectonitas confirmed on body {body}, worth {value} million credits.",
@@ -11,9 +12,9 @@
         "tts_alert": "Stratum Tectonitas almost certain on body {body}, never visited before, worth up to {value} million credits!",
         "conditions": {
           "planet_class": [ "High metal content body" ],
-          "atmosphere_type": [],
+          "atmosphere_type": [ "CarbonDioxideRich", "Oxygen", "Water", "CarbonDioxide", "SulphurDioxide", "Ammonia", "ArgonRich", "Argon" ],
           "temperature": { "min": 165, "max": null },
-          "gravity": { "min": null, "max": null },
+          "gravity": { "min": 0.4413, "max": 5.9526 },
           "volcanism": [],
           "star_type": [],
           "bio_signals": { "min": 2, "max": null },
@@ -25,9 +26,9 @@
         "tts_alert": "Stratum Tectonitas almost certain on body {body}, worth {value} million credits.",
         "conditions": {
           "planet_class": [ "High metal content body" ],
-          "atmosphere_type": [],
+          "atmosphere_type": [ "CarbonDioxideRich", "Oxygen", "Water", "CarbonDioxide", "SulphurDioxide", "Ammonia", "ArgonRich", "Argon" ],
           "temperature": { "min": 165, "max": null },
-          "gravity": { "min": null, "max": null },
+          "gravity": { "min": 0.4413, "max": 5.9526 },
           "volcanism": [],
           "star_type": [],
           "bio_signals": { "min": 2, "max": null }
@@ -38,9 +39,9 @@
         "tts_alert": "Possible Stratum Tectonitas on body {body}, worth {value} million credits.",
         "conditions": {
           "planet_class": [ "High metal content body" ],
-          "atmosphere_type": [],
+          "atmosphere_type": [ "CarbonDioxideRich", "Oxygen", "Water", "CarbonDioxide", "SulphurDioxide", "Ammonia", "ArgonRich", "Argon" ],
           "temperature": { "min": 165, "max": null },
-          "gravity": { "min": null, "max": null },
+          "gravity": { "min": 0.4413, "max": 5.9526 },
           "volcanism": [],
           "star_type": [],
           "bio_signals": { "min": 1, "max": 1 }

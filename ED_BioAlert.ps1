@@ -1,9 +1,6 @@
 ﻿#############################################################################
-####                   Sevetamryn 2026                                   ####
+####              Sevetamryn & Claude 2026                               ####
 #############################################################################
-param(
-    [switch]$ScanAll
-)
 # THIS SOFTWARE IS PROVIDED “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES,
 # INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
 # AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -15,6 +12,19 @@ param(
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #############################################################################
+#
+# Command line options:
+#   (none)        Live mode: tail the newest journal file, TTS active
+#   -ScanAll      Process all journal files in log directory, console output only
+#   -TestFile     Process a single journal file with TTS active from line 1,
+#                 simulating live mode without a running game
+#                 Example: .\ED_BioAlert.ps1 -TestFile “path\to\Journal.log”
+#
+#############################################################################
+param(
+    [switch]$ScanAll,
+    [string]$TestFile
+)
 
 # Load configuration
 $_config = Get-Content (Join-Path $PSScriptRoot "ED_BioAlert.config.json") -Raw | ConvertFrom-Json
@@ -23,17 +33,19 @@ $Global:debug      = $_config.Debug
 $Global:ListEvents = $_config.ListEvents
 $Global:TTSvolume  = $_config.TTSVolume
 $Global:Mining     = $_config.Mining
-$Global:Lifescan   = $true
-if ($ScanAll) { $Global:Lifescan = $false }
+$Global:LiveMode   = $true
+$Global:TTS        = $true
+if ($ScanAll)   { $Global:LiveMode = $false; $Global:TTS = $false }
+if ($TestFile)  { $Global:LiveMode = $false }
 
 if (-not $LogPath) {
     if ($_config.LogPath) { $LogPath = $_config.LogPath }
-    else { $LogPath = "$env:USERPROFILE\Saved Games\Frontier Developments\Elite Dangerous" }
+    else { $LogPath = Join-Path $env:USERPROFILE "Saved Games\Frontier Developments\Elite Dangerous" }
 }
 $FilePattern = "Journal*.log"
 
 # creat Folder for system files if not exist
-New-Item -Path "$LogPath\SystemData" -ItemType Directory -Force | Out-Null
+New-Item -Path (Join-Path $LogPath "SystemData") -ItemType Directory -Force | Out-Null
 
 # Text to Speach Support
 $Global:TTSAvailable = $false
@@ -72,10 +84,41 @@ Function Import-SpeciesData {
     $Global:SpeciesAlerts = @()
     $SpeciesPath = Join-Path $PSScriptRoot "SpeciesData"
     if (Test-Path $SpeciesPath) {
+        # First pass: load all base entries (no base reference)
         foreach ($file in Get-ChildItem -Path $SpeciesPath -Filter "*.json") {
             $entries = Get-Content $file.FullName -Raw | ConvertFrom-Json
             foreach ($entry in $entries) {
-                $Global:SpeciesAlerts += $entry
+                if (-not $entry.base) {
+                    $Global:SpeciesAlerts += $entry
+                }
+            }
+        }
+        # Second pass: load color entries, merging base conditions
+        foreach ($file in Get-ChildItem -Path $SpeciesPath -Filter "*.json") {
+            $entries = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            foreach ($entry in $entries) {
+                if ($entry.base) {
+                    $baseEntry = $Global:SpeciesAlerts | Where-Object {
+                        $_.genus -eq $entry.genus -and $_.species -eq $entry.species -and $_.color -eq ""
+                    } | Select-Object -First 1
+                    if (-not $baseEntry) {
+                        New-EDMessage -Voice $Global:debug -Message "Skipping $($entry.genus) $($entry.species) $($entry.color) - base not found"
+                        continue
+                    }
+                    # Merge base conditions into color alerts where fields are empty/null
+                    foreach ($alert in $entry.alerts) {
+                        foreach ($prop in $baseEntry.alerts[0].conditions.PSObject.Properties.Name) {
+                            if (-not $alert.conditions.PSObject.Properties[$prop]) {
+                                $alert.conditions | Add-Member -MemberType NoteProperty -Name $prop -Value $baseEntry.alerts[0].conditions.$prop
+                            } elseif ($alert.conditions.$prop -is [System.Array] -and $alert.conditions.$prop.Count -eq 0) {
+                                $alert.conditions.$prop = $baseEntry.alerts[0].conditions.$prop
+                            } elseif ($alert.conditions.$prop -eq $null) {
+                                $alert.conditions.$prop = $baseEntry.alerts[0].conditions.$prop
+                            }
+                        }
+                    }
+                    $Global:SpeciesAlerts += $entry
+                }
             }
         }
     }
@@ -124,7 +167,7 @@ Function Invoke-SpeciesAlerts {
     )
 
     foreach ($species in $Global:SpeciesAlerts) {
-        $alertKey = "$($Body.BodyID)_$($species.genus)_$($species.species)"
+        $alertKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_$($species.color)"
         if ($Global:AlertedSpecies[$alertKey]) { continue }
 
         foreach ($alert in $species.alerts) {
@@ -133,7 +176,7 @@ Function Invoke-SpeciesAlerts {
                 $message = $alert.tts_alert `
                     -replace '\{body\}', $BodyNameShort `
                     -replace '\{value\}', $value
-                New-EDMessage -Voice $Global:Lifescan -Message $message
+                New-EDMessage -Voice $Global:TTS -Message $message
                 $Global:AlertedSpecies[$alertKey] = $true
                 break  # first matching alert level only
             }
@@ -154,7 +197,7 @@ Function Invoke-DSSAlerts {
             if ($species.genus -ne $genusName) { continue }
             if (-not $species.dss_tts_alert) { continue }
 
-            $dssKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_dss"
+            $dssKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_$($species.color)_dss"
             if ($Global:AlertedSpecies[$dssKey]) { continue }
 
             foreach ($alert in $species.alerts) {
@@ -163,7 +206,7 @@ Function Invoke-DSSAlerts {
                     $message = $species.dss_tts_alert `
                         -replace '\{body\}', $BodyNameShort `
                         -replace '\{value\}', $value
-                    New-EDMessage -Voice $Global:Lifescan -Message $message
+                    New-EDMessage -Voice $Global:TTS -Message $message
                     $Global:AlertedSpecies[$dssKey] = $true
                     break
                 }
@@ -172,53 +215,82 @@ Function Invoke-DSSAlerts {
     }
 }
 
-Function New-EDMessage { 
-    [CmdletBinding()] 
-    param( 
-        [Parameter(Mandatory = $true)] [bool]$Voice, 
-        [Parameter(Mandatory = $true)] [string]$Message 
-        ) 
-        
+Function New-EDMessage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)] [bool]$Voice,
+        [Parameter(Mandatory = $true)] [string]$Message
+        )
+
     if ($Voice -and $Global:TTSAvailable) {
         $dummy = $speaker.SpeakAsync($Message)
+        Write-Host $Message
+    } elseif ($Voice) {
+        Write-Host $Message -ForegroundColor Green
+    } else {
+        Write-Host $Message
     }
-    Write-Host $Message
 }
 
 Function Write-Starsystem {
+    param([string]$Timestamp)
     if ($Global:Starsystem.Count -gt 0) {
-        $fixed = @{} 
-        foreach ($key in $Global:Starsystem.Keys) { 
-            $fixed["$key"] = $Global:Starsystem[$key] 
-        } 
-        $fixed | ConvertTo-Json | Set-Content "$LogPath\SystemData\$($Global:SystemName).json"
-        
+        $fixed = @{}
+        foreach ($key in $Global:Starsystem.Keys) {
+            $fixed["$key"] = $Global:Starsystem[$key]
+        }
+        $systemFile = Join-Path $LogPath "SystemData\$($Global:SystemName).json"
+        $fixed | ConvertTo-Json -Depth 10 | Set-Content $systemFile
+
         ## New-EDMessage -Voice $Global:debug -Message "write system data to disk for $($Global:SystemName)"
-        
+
         ## set creation time regarding timestamp (importand for log import)
-        (Get-Item "$LogPath\SystemData\$($Global:SystemName).json").LastWriteTime = [datetime]$line.timestamp
+        if ($Timestamp) { (Get-Item $systemFile).LastWriteTime = [datetime]$Timestamp }
     }
     # clear data
     $Global:Starsystem = @{}
     $Global:SystemName = "unknown"
     $Global:AlertedSpecies = @{}
+    $Global:SystemScanAnnounced = $false
 }
 
 Function Read-Starsystem {
-    if (Test-Path "$LogPath\SystemData\$Global:SystemName.json") {
-        $Data = Get-Content $LogPath\SystemData\$($Global:SystemName).json -Raw | ConvertFrom-Json 
-        foreach ($key in $Data.PSObject.Properties.Name) { 
-            $intKey = [int]$key 
-            $Global:Starsystem[$intKey] = $Data.$key 
+    $systemFile = Join-Path $LogPath "SystemData\$($Global:SystemName).json"
+    if (Test-Path $systemFile) {
+        $Data = Get-Content $systemFile -Raw | ConvertFrom-Json
+        foreach ($key in $Data.PSObject.Properties.Name) {
+            $intKey = [int]$key
+            $body = $Data.$key
+            if ($body.Genuses) {
+                $list = [System.Collections.Generic.List[object]]::new()
+                foreach ($g in $body.Genuses) { $list.Add($g) }
+                $body | Add-Member -MemberType NoteProperty -Name Genuses -Value $list -Force
+            }
+            $Global:Starsystem[$intKey] = $body
         }
         ## New-EDMessage -Voice $Global:debug -Message "Load system information for $($Global:SystemName)"
     }
 }
 
+Function Invoke-LogLine {
+    param([string]$RawLine)
+    $line = $RawLine | ConvertFrom-Json
+    if ($line.StarSystem) {
+        $line.StarSystem = $line.StarSystem -replace '\*', 'STAR'
+    }
+    if ($line.Genuses) {
+        $list = [System.Collections.Generic.List[object]]::new()
+        foreach ($g in $line.Genuses) { $list.Add($g) }
+        $line.Genuses = $list
+    }
+    Invoke-EDEvent -line $line
+}
+
 Function Invoke-EDEvent {
+    param($line)
 
     ### write event types to console
-    if ($Global:ListEvents -and $Global:Lifescan -and $line.event -ne "Music") { 
+    if ($Global:ListEvents -and $Global:TTS -and $line.event -ne "Music") {
         Write-Host "New Event:" $line.event 
     }
     $updated = $false
@@ -229,22 +301,22 @@ Function Invoke-EDEvent {
  
     ### Write System data on game exit
     if ($line.event -eq "Shutdown" -and $Global:Starsystem.Count -gt 0) {
-        Write-Starsystem
+        Write-Starsystem -Timestamp $line.timestamp
     }
 
     ### force read on new logfile / carrier location on session start
     if ($line.event -eq "Location" -or $line.event -eq "CarrierLocation") {
-        Write-Starsystem
+        Write-Starsystem -Timestamp $line.timestamp
         $Global:SystemName = $line.StarSystem
         Read-Starsystem
     }
 
     ### Starsystem changed since last event
-    if ( ($Global:Starsystem.Count -gt 0) -and 
-            ($line.StarSystem -ne $null) -and 
-            ($line.StarSystem -ne $Global:SystemName) 
+    if ( ($Global:Starsystem.Count -gt 0) -and
+            ($line.StarSystem -ne $null) -and
+            ($line.StarSystem -ne $Global:SystemName)
         ) {
-        Write-Starsystem
+        Write-Starsystem -Timestamp $line.timestamp
         $Global:SystemName = $line.StarSystem
         Read-Starsystem
     }
@@ -281,9 +353,9 @@ Function Invoke-EDEvent {
         if ( $Global:Starsystem[$line.BodyID] -eq $null ) {
             $Global:Starsystem[$line.BodyID] += $line
         } else {
-            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force
-            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Genuses -Value $line.Genuses -Force
-            $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Rings -Value $line.Rings -Force
+            if ($line.Signals -ne $null) { $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Signals -Value $line.Signals -Force }
+            if ($line.Genuses -ne $null) { $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Genuses -Value $line.Genuses -Force }
+            if ($line.Rings   -ne $null) { $Global:Starsystem[$line.BodyID] | Add-Member -MemberType NoteProperty -Name Rings   -Value $line.Rings   -Force }
         }
     }
 
@@ -316,11 +388,11 @@ Function Invoke-EDEvent {
 
     # Tourits Beaconm
     if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalType -eq "TouristBeacon"){
-        New-EDMessage -Voice $Global:Lifescan -Message "There is Tourist Beacon here named $($line.SignalName)"
+        New-EDMessage -Voice $Global:TTS -Message "There is Tourist Beacon here named $($line.SignalName)"
     }
     # stellar phenomena
     if ($line.event -eq "FSSSignalDiscovered" -and $line.SignalName -eq '$Fixed_Event_Life_Cloud;'){
-        New-EDMessage -Voice $Global:Lifescan -Message "Found a $($line.SignalName_Localised) here"
+        New-EDMessage -Voice $Global:TTS -Message "Found a $($line.SignalName_Localised) here"
     }
 
             
@@ -371,7 +443,7 @@ Function Invoke-EDEvent {
             
                 ### Tritium found
                 if ( $Tritium = $Global:Starsystem[$line.BodyID].Signals | Where-Object -Property "Type" -EQ "Tritium" ) {
-                    New-EDMessage -Voice $Global:Lifescan -Message "$($Tritium.count) Tritium Hotspots detected here."
+                    New-EDMessage -Voice $Global:TTS -Message "$($Tritium.count) Tritium Hotspots detected here."
                 }
             }
         }
@@ -383,7 +455,7 @@ Function Invoke-EDEvent {
 
             ### Icy Rings found 
             If ( $IcyRings = $Global:Starsystem[$line.BodyID].Rings | Where-Object -Property "RingClass" -EQ "eRingClass_Icy" ) {
-                New-EDMessage -Voice $Global:Lifescan -Message "Body $BodyNameShort has pristine icy rings present."
+                New-EDMessage -Voice $Global:TTS -Message "Body $BodyNameShort has pristine icy rings present."
             }
 
         }
@@ -399,7 +471,8 @@ Function Invoke-EDEvent {
     ###
     if (-not $Global:SystemScanAnnounced -and ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 ))) {
         $Global:SystemScanAnnounced = $true
-        New-EDMessage -Voice $Global:Lifescan -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
+        $bodyCount = if ($line.BodyCount) { $line.BodyCount } elseif ($line.Count) { $line.Count } else { $Global:Starsystem.Count }
+        New-EDMessage -Voice $Global:TTS -Message "Finished Scan, $bodyCount bodies found"
 
         # Log Console Bodies with Signals
         foreach ($Key in $Global:Starsystem.keys) {
@@ -418,13 +491,13 @@ Function Invoke-EDEvent {
 # Load species alert definitions
 Import-SpeciesData
 
-New-EDMessage -Voice $Global:Lifescan -Message "Monitoring Elite Dangerous Logfiles now!"
+New-EDMessage -Voice $Global:TTS -Message "Monitoring Elite Dangerous Logfiles now!"
 
 
 ###
 # Life scan logfile
 ###
-while ($Global:Lifescan) {
+while ($Global:LiveMode) {
 
     # Detect newest file
     $newest = Get-NewestLogFile
@@ -449,8 +522,8 @@ while ($Global:Lifescan) {
         $currentStream = [System.IO.File]::Open($currentFile.FullName, 'Open', 'Read', 'ReadWrite')
         # $lastLength = $currentStream.Length  # Skip existing content
         # we fully read in the newest file to get up to date
-        $lastLength = 0 # read in exiting lines, stay quiet during read of existing data
-        $Global:Lifescan = $false # work quietly during read in of exiting data
+        $lastLength = 0 # read in existing lines, stay quiet during catch-up
+        $Global:TTS = $false # suppress TTS during catch-up read
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         # Announce new logfile
@@ -463,26 +536,15 @@ while ($Global:Lifescan) {
         $currentStream.Seek($lastLength, 'Begin') | Out-Null
 
         while (-not $reader.EndOfStream) {
-            $line = $reader.ReadLine() | ConvertFrom-Json
-            ## Genuses need to be expandable later, therefor conversion from array to list
-            if ($line.Genuses) {
-                $list = [System.Collections.Generic.List[object]]::new()
-                foreach ($g in $line.Genuses) {
-                    $list.Add($g)
-                }
-                $line.Genuses = $list
-            }
-            #
-            # call the Event Handler
-            Invoke-EDEvent
+            Invoke-LogLine -RawLine $reader.ReadLine()
         }
 
         $lastLength = $currentStream.Position
     }
 
     Start-Sleep -Milliseconds 200
-    if ( -not $Global:Lifescan ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
-    $Global:Lifescan = $true # as we had to wait for new log lines, time to talk again
+    if ( -not $Global:TTS ) { New-EDMessage -Voice $true -Message "I'm up to date with the existing session data" }
+    $Global:TTS = $true # catch-up done, TTS active again
 }
 
 
@@ -490,29 +552,19 @@ while ($Global:Lifescan) {
 # Import Logfiles
 ###
 
-$Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name 
+if ($TestFile) {
+    $Logfiles = @(Get-Item $TestFile)
+} else {
+    $Logfiles = Get-ChildItem -Path $LogPath -Filter $FilePattern | Sort-Object Name
+}
 
-foreach ($file in $logfiles ) {
+foreach ($file in $Logfiles) {
 
     $reader = [System.IO.File]::OpenText($file.FullName)
-    while (($read = $reader.ReadLine()) -ne $null) { 
-        $line = $read | ConvertFrom-Json
-        if ($line.Genuses) {
-            $list = [System.Collections.Generic.List[object]]::new()
-            foreach ($g in $line.Genuses) {
-                $list.Add($g)
-            }
-            $line.Genuses = $list
-        }
-
-        ## fix for systems having a * in name
-        if ( $line.StarSystem ) { 
-            $line.StarSystem = $line.StarSystem -replace '\*', 'STAR' 
-        }
-        ## wtf ...
-        Invoke-EDEvent
-    } 
+    while (($read = $reader.ReadLine()) -ne $null) {
+        Invoke-LogLine -RawLine $read
+    }
     $reader.Close()
-    if ($Global:debug) {Write-Host "file $file finished ... "}
+    if ($Global:debug) { Write-Host "file $file finished ... " }
 }
 
