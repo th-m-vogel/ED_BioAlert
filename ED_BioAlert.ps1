@@ -440,7 +440,8 @@ Function Invoke-EDEvent {
     ###
     if (-not $Global:SystemScanAnnounced -and ($line.event -eq "FSSAllBodiesFound" -or ($line.event -eq "FSSDiscoveryScan" -and $line.Progress -eq 1 ))) {
         $Global:SystemScanAnnounced = $true
-        New-EDMessage -Voice $Global:TTS -Message "Finished Scan detected, found $($Global:Starsystem.Count) system members"
+        $bodyCount = if ($line.BodyCount) { $line.BodyCount } elseif ($line.Count) { $line.Count } else { $Global:Starsystem.Count }
+        New-EDMessage -Voice $Global:TTS -Message "Finished Scan, $bodyCount bodies found"
 
         # Log Console Bodies with Signals
         foreach ($Key in $Global:Starsystem.keys) {
