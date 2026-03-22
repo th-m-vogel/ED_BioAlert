@@ -84,10 +84,41 @@ Function Import-SpeciesData {
     $Global:SpeciesAlerts = @()
     $SpeciesPath = Join-Path $PSScriptRoot "SpeciesData"
     if (Test-Path $SpeciesPath) {
+        # First pass: load all base entries (no base reference)
         foreach ($file in Get-ChildItem -Path $SpeciesPath -Filter "*.json") {
             $entries = Get-Content $file.FullName -Raw | ConvertFrom-Json
             foreach ($entry in $entries) {
-                $Global:SpeciesAlerts += $entry
+                if (-not $entry.base) {
+                    $Global:SpeciesAlerts += $entry
+                }
+            }
+        }
+        # Second pass: load color entries, merging base conditions
+        foreach ($file in Get-ChildItem -Path $SpeciesPath -Filter "*.json") {
+            $entries = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            foreach ($entry in $entries) {
+                if ($entry.base) {
+                    $baseEntry = $Global:SpeciesAlerts | Where-Object {
+                        $_.genus -eq $entry.genus -and $_.species -eq $entry.species -and $_.color -eq ""
+                    } | Select-Object -First 1
+                    if (-not $baseEntry) {
+                        New-EDMessage -Voice $Global:debug -Message "Skipping $($entry.genus) $($entry.species) $($entry.color) - base not found"
+                        continue
+                    }
+                    # Merge base conditions into color alerts where fields are empty/null
+                    foreach ($alert in $entry.alerts) {
+                        foreach ($prop in $baseEntry.alerts[0].conditions.PSObject.Properties.Name) {
+                            if (-not $alert.conditions.PSObject.Properties[$prop]) {
+                                $alert.conditions | Add-Member -MemberType NoteProperty -Name $prop -Value $baseEntry.alerts[0].conditions.$prop
+                            } elseif ($alert.conditions.$prop -is [System.Array] -and $alert.conditions.$prop.Count -eq 0) {
+                                $alert.conditions.$prop = $baseEntry.alerts[0].conditions.$prop
+                            } elseif ($alert.conditions.$prop -eq $null) {
+                                $alert.conditions.$prop = $baseEntry.alerts[0].conditions.$prop
+                            }
+                        }
+                    }
+                    $Global:SpeciesAlerts += $entry
+                }
             }
         }
     }
@@ -136,7 +167,7 @@ Function Invoke-SpeciesAlerts {
     )
 
     foreach ($species in $Global:SpeciesAlerts) {
-        $alertKey = "$($Body.BodyID)_$($species.genus)_$($species.species)"
+        $alertKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_$($species.color)"
         if ($Global:AlertedSpecies[$alertKey]) { continue }
 
         foreach ($alert in $species.alerts) {
@@ -166,7 +197,7 @@ Function Invoke-DSSAlerts {
             if ($species.genus -ne $genusName) { continue }
             if (-not $species.dss_tts_alert) { continue }
 
-            $dssKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_dss"
+            $dssKey = "$($Body.BodyID)_$($species.genus)_$($species.species)_$($species.color)_dss"
             if ($Global:AlertedSpecies[$dssKey]) { continue }
 
             foreach ($alert in $species.alerts) {

@@ -1,0 +1,38 @@
+[
+  {
+    "base": "stratum-tectonitas",
+    "genus": "Stratum",
+    "species": "Tectonitas",
+    "color": "Emerald",
+    "reward": 19010800,
+    "platform": "odyssey",
+    "dss_tts_alert": "Stratum Tectonitas Emerald confirmed on body {body} - codex entry!",
+    "alerts": [
+      {
+        "level": "possible",
+        "tts_alert": "Possible Stratum Tectonitas Emerald on body {body} - codex entry!",
+        "conditions": {
+          "star_type": [ "F" ]
+        }
+      }
+    ]
+  },
+  {
+    "base": "stratum-tectonitas",
+    "genus": "Stratum",
+    "species": "Tectonitas",
+    "color": "Amethyst",
+    "reward": 19010800,
+    "platform": "odyssey",
+    "dss_tts_alert": "Stratum Tectonitas Amethyst confirmed on body {body} - rare codex entry!",
+    "alerts": [
+      {
+        "level": "possible",
+        "tts_alert": "Rare Stratum Tectonitas Amethyst on body {body} - T-Tauri codex entry!",
+        "conditions": {
+          "star_type": [ "TTS" ]
+        }
+      }
+    ]
+  }
+]
